@@ -1,9 +1,9 @@
 package com.dotlo.line4thon_18team.place.controller;
 
 import com.dotlo.line4thon_18team.auth.LoginUser;
+import com.dotlo.line4thon_18team.place.dto.GooglePlaceRequest;
 import com.dotlo.line4thon_18team.place.dto.PlaceImportResponse;
 import com.dotlo.line4thon_18team.place.dto.PlaceLinkRequest;
-import com.dotlo.line4thon_18team.place.dto.PlaceMatchRequest;
 import com.dotlo.line4thon_18team.place.dto.SavedPlaceListResponse;
 import com.dotlo.line4thon_18team.place.service.PlaceEnrichService;
 import com.dotlo.line4thon_18team.place.service.SavedPlaceService;
@@ -36,6 +36,15 @@ public class SavedPlaceController {
         return ResponseEntity.ok(savedPlaceService.getPlaces(userId, tripId));
     }
 
+    // 장소 직접 추가: 검색해서 고른 구글 장소를 "직접 추가" 리스트로 저장하고, 전체 목록을 돌려준다
+    // 이미 있는 장소면 새로 만들지 않고 목록만 돌려준다
+    @PostMapping
+    public ResponseEntity<SavedPlaceListResponse> addPlace(@LoginUser Long userId, @PathVariable Long tripId,
+                                                           @Valid @RequestBody GooglePlaceRequest request) {
+        placeEnrichService.add(userId, tripId, request.placeId());
+        return ResponseEntity.ok(savedPlaceService.getPlaces(userId, tripId));
+    }
+
     // Takeout CSV 하나 또는 Takeout zip 업로드 (form-data, key: file)
     @PostMapping(value = "/upload", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ResponseEntity<PlaceImportResponse> uploadTakeout(@LoginUser Long userId, @PathVariable Long tripId,
@@ -63,7 +72,7 @@ public class SavedPlaceController {
     @PatchMapping("/{placeId}/match")
     public ResponseEntity<SavedPlaceListResponse> matchPlace(@LoginUser Long userId, @PathVariable Long tripId,
                                                              @PathVariable Long placeId,
-                                                             @Valid @RequestBody PlaceMatchRequest request) {
+                                                             @Valid @RequestBody GooglePlaceRequest request) {
         placeEnrichService.match(userId, tripId, placeId, request.placeId());
         return ResponseEntity.ok(savedPlaceService.getPlaces(userId, tripId));
     }

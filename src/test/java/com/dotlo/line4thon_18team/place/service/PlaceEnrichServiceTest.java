@@ -18,18 +18,22 @@ import com.dotlo.line4thon_18team.place.PlaceMatcher.MatchResult;
 import com.dotlo.line4thon_18team.place.PlaceMatcher.MatchStatus;
 import com.dotlo.line4thon_18team.place.PlaceMatcher.PlaceInput;
 import com.dotlo.line4thon_18team.place.entity.PlaceMatchStatus;
+import com.dotlo.line4thon_18team.place.entity.PlaceSource;
 import com.dotlo.line4thon_18team.place.entity.SavedPlace;
 import com.dotlo.line4thon_18team.place.repository.SavedPlaceRepository;
 import com.dotlo.line4thon_18team.trip.entity.Companion;
 import com.dotlo.line4thon_18team.trip.entity.Trip;
 import com.dotlo.line4thon_18team.trip.service.TripService;
 import com.dotlo.line4thon_18team.user.entity.User;
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.LockModeType;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
@@ -41,8 +45,9 @@ class PlaceEnrichServiceTest {
     private final TripService tripService = mock(TripService.class);
     private final PlaceMatcher placeMatcher = mock(PlaceMatcher.class);
     private final SavedPlaceRepository repository = mock(SavedPlaceRepository.class);
+    private final EntityManager entityManager = mock(EntityManager.class);
     private final PlaceEnrichService service = new PlaceEnrichService(tripService, placeMatcher, repository,
-            new TransactionTemplate(mock(PlatformTransactionManager.class)));
+            new TransactionTemplate(mock(PlatformTransactionManager.class)), entityManager);
     private Trip trip;
 
     @BeforeEach
@@ -52,6 +57,7 @@ class PlaceEnrichServiceTest {
                 "오사카", start, start.plusDays(2), Companion.ALONE, null);
         ReflectionTestUtils.setField(trip, "id", 7L);
         when(tripService.findOwnedTrip(1L, 7L)).thenReturn(trip);
+        when(entityManager.find(Trip.class, 7L, LockModeType.PESSIMISTIC_WRITE)).thenReturn(trip);
     }
 
     @Test
@@ -112,6 +118,7 @@ class PlaceEnrichServiceTest {
 
         assertThat(existing.getListNames()).containsExactlyInAnyOrder("오사카 맛집", "라멘");
         verify(repository).delete(pin);
+        verify(entityManager).find(Trip.class, 7L, LockModeType.PESSIMISTIC_WRITE);   // 직접 추가와 같은 여행 잠금
     }
 
     @Test
@@ -215,6 +222,59 @@ class PlaceEnrichServiceTest {
 
         verify(repository, never()).delete(any());
         assertThat(ichiran.getMatchStatus()).isEqualTo(PlaceMatchStatus.MATCHED);
+    }
+
+    @Test
+    void 직접_추가하면_직접_추가_리스트로_매칭된_장소가_저장된다() {
+        when(placeMatcher.details(null, "p1")).thenReturn(
+                matched(null, new Candidate("p1", "하루카스 300", "오사카 아베노", 34.646, 135.513), PlaceCategory.SIGHTSEEING, false));
+
+        service.add(1L, 7L, "p1");
+
+        ArgumentCaptor<SavedPlace> saved = ArgumentCaptor.forClass(SavedPlace.class);
+        verify(repository).save(saved.capture());
+        SavedPlace p = saved.getValue();
+        assertThat(p.getName()).isEqualTo("하루카스 300");
+        assertThat(p.getPlaceId()).isEqualTo("p1");
+        assertThat(p.getSource()).isEqualTo(PlaceSource.MANUAL_SEARCH);
+        assertThat(p.getListNames()).containsExactly("직접 추가");
+        assertThat(p.getCategory()).isEqualTo(PlaceCategory.SIGHTSEEING);
+        assertThat(p.getMatchStatus()).isEqualTo(PlaceMatchStatus.MATCHED);
+    }
+
+    @Test
+    void 직접_추가한_장소가_폐업이면_CLOSED로_저장된다() {
+        when(placeMatcher.details(null, "p2")).thenReturn(
+                matched(null, new Candidate("p2", "폐업한 가게", "오사카", 34.69, 135.50), PlaceCategory.CAFE, true));
+
+        service.add(1L, 7L, "p2");
+
+        ArgumentCaptor<SavedPlace> saved = ArgumentCaptor.forClass(SavedPlace.class);
+        verify(repository).save(saved.capture());
+        assertThat(saved.getValue().getMatchStatus()).isEqualTo(PlaceMatchStatus.CLOSED);
+    }
+
+    @Test
+    void 이미_있는_장소를_직접_추가하면_구글을_부르지_않고_저장하지_않는다() {
+        when(repository.findFirstByTripIdAndPlaceId(7L, "p1")).thenReturn(Optional.of(place(1L, "이치란", "오사카 맛집")));
+
+        service.add(1L, 7L, "p1");
+
+        verify(placeMatcher, never()).details(any(), any());
+        verify(repository, never()).save(any());
+    }
+
+    @Test
+    void 구글을_기다리는_사이_같은_장소가_들어왔으면_저장하지_않는다() {
+        when(placeMatcher.details(null, "p1")).thenReturn(
+                matched(null, new Candidate("p1", "이치란", "오사카", 34.70, 135.50), PlaceCategory.FOOD, false));
+        when(repository.findFirstByTripIdAndPlaceId(7L, "p1"))
+                .thenReturn(Optional.empty())                                   // 구글 부르기 전
+                .thenReturn(Optional.of(place(1L, "이치란", "오사카 맛집")));     // 저장 직전
+
+        service.add(1L, 7L, "p1");
+
+        verify(repository, never()).save(any());
     }
 
     private SavedPlace place(Long id, String name, String listName) {
