@@ -2,6 +2,7 @@ package com.dotlo.line4thon_18team.place;
 
 import com.dotlo.line4thon_18team.place.PlaceMatcher.LatLng;
 import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -37,6 +38,7 @@ public class TravelTime {
     private static final String FIELD_MASK = "routes.duration,routes.legs.steps.travelMode";
     private static final int WALK_MAX_MIN = 20;
     private static final int TRANSIT_EXTRA_MIN = 10;  // 자동차 시간 → 대중교통 추정: 역까지 걷기, 기다리기
+    private static final int TRANSIT_SCHEDULE_DAYS = 90;  // 이보다 먼 출발은 가까운 날짜로 바꿔 조회
 
     private final String apiKey;
     private final RestClient rest = GoogleClient.create();
@@ -54,7 +56,7 @@ public class TravelTime {
     */
     public Leg get(LatLng from, LatLng to, Instant departure) {
         try {
-            Route transit = route(from, to, "TRANSIT", departure);
+            Route transit = route(from, to, "TRANSIT", transitDeparture(departure, Instant.now()));
             if (transit != null && hasTransitStep(transit)) return new Leg(minutes(transit), Mode.TRANSIT, false);
 
             // 대중교통 경로가 걷기뿐이면 그 시간이 도보 시간과 같음 (2026-11-01 오사카에서 확인). 경로가 없으면 도보로 다시 조회.
@@ -67,6 +69,14 @@ public class TravelTime {
             log.warn("Routes API 오류, 직선거리로 추정: {}", e.getMessage());
         }
         return straightLine(from, to);
+    }
+
+    // 구글은 약 100일 뒤까지만 대중교통 경로를 줌 (2026-11-06 방콕: 101일 뒤 있음, 105일 뒤 없음 → 추정치로 떨어짐).
+    // 90일보다 먼 출발은 같은 요일·같은 시각인 7~13일 뒤 날짜로 바꿔 조회. ponytail: 공휴일·시간표 개편은 무시
+    static Instant transitDeparture(Instant departure, Instant now) {
+        if (departure == null || departure.isBefore(now.plus(TRANSIT_SCHEDULE_DAYS, ChronoUnit.DAYS))) return departure;
+        long weeks = ChronoUnit.DAYS.between(now, departure) / 7 - 1;
+        return departure.minus(weeks * 7, ChronoUnit.DAYS);
     }
 
     // ponytail: 굽은 길 1.3배, 도보 분당 80m, 대중교통 분당 300m + 10분. 실제 값과 비교해서 조정.

@@ -34,6 +34,21 @@ class TravelTimeTest {
         assertEquals(23, far.minutes());
     }
 
+    @Test
+    void 먼_출발은_같은_요일_같은_시각의_가까운_날로_바꾼다() {
+        Instant now = Instant.parse("2026-11-06T00:00:00Z");
+        Instant far = Instant.parse("2027-03-16T03:00:00Z");   // 130일 뒤 화요일 12시(KST)
+        Instant shifted = TravelTime.transitDeparture(far, now);
+        long days = java.time.Duration.between(now, shifted).toDays();
+        assertTrue(days >= 7 && days <= 13, "며칠 뒤: " + days);
+        assertEquals(0, java.time.Duration.between(shifted, far).toDays() % 7);          // 같은 요일
+        assertEquals(far.atZone(ZoneOffset.UTC).toLocalTime(), shifted.atZone(ZoneOffset.UTC).toLocalTime());  // 같은 시각
+
+        Instant soon = Instant.parse("2026-12-10T03:00:00Z");  // 34일 뒤는 그대로
+        assertEquals(soon, TravelTime.transitDeparture(soon, now));
+        assertNull(TravelTime.transitDeparture(null, now));
+    }
+
     // 실제 API 호출. 키가 환경변수에 있을 때만 (CI에서는 건너뜀)
     @Test
     @EnabledIfEnvironmentVariable(named = "GOOGLE_MAPS_API_KEY", matches = ".+")
@@ -57,6 +72,12 @@ class TravelTimeTest {
         assertEquals(Mode.TRANSIT, seoul.mode());
         assertFalse(seoul.estimated());
 
-        System.out.println("도보: " + near + " / 오사카 추정: " + far + " / 서울: " + seoul);
+        // 방콕 130일 뒤 → 구글은 경로를 안 주지만 가까운 날로 바꿔서 실제 대중교통 (2026-11-06 확인)
+        Instant later = noonKst.plus(130, java.time.temporal.ChronoUnit.DAYS);
+        Leg bangkok = service.get(new LatLng(13.7465, 100.5348), new LatLng(13.7500, 100.4913), later);
+        assertEquals(Mode.TRANSIT, bangkok.mode());
+        assertFalse(bangkok.estimated());
+
+        System.out.println("도보: " + near + " / 오사카 추정: " + far + " / 서울: " + seoul + " / 방콕 130일 뒤: " + bangkok);
     }
 }
