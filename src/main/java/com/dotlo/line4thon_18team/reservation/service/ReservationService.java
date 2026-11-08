@@ -4,12 +4,18 @@ import com.dotlo.line4thon_18team.global.error.BusinessException;
 import com.dotlo.line4thon_18team.global.error.ErrorCode;
 import com.dotlo.line4thon_18team.place.PlaceMatcher;
 import com.dotlo.line4thon_18team.place.PlaceMatcher.Candidate;
+import com.dotlo.line4thon_18team.reservation.FlightClient;
+import com.dotlo.line4thon_18team.reservation.dto.FlightInfo;
 import com.dotlo.line4thon_18team.reservation.dto.ReservationResponse;
+import com.dotlo.line4thon_18team.reservation.dto.ReservationResponse.FlightsResponse;
 import com.dotlo.line4thon_18team.reservation.dto.ReservationResponse.RentalResponse;
 import com.dotlo.line4thon_18team.reservation.dto.ReservationResponse.StayResponse;
 import com.dotlo.line4thon_18team.reservation.dto.StaysRequest.Stay;
+import com.dotlo.line4thon_18team.reservation.entity.FlightDirection;
+import com.dotlo.line4thon_18team.reservation.entity.TripFlight;
 import com.dotlo.line4thon_18team.reservation.entity.TripRental;
 import com.dotlo.line4thon_18team.reservation.entity.TripStay;
+import com.dotlo.line4thon_18team.reservation.repository.TripFlightRepository;
 import com.dotlo.line4thon_18team.reservation.repository.TripRentalRepository;
 import com.dotlo.line4thon_18team.reservation.repository.TripStayRepository;
 import com.dotlo.line4thon_18team.trip.entity.Trip;
@@ -22,20 +28,28 @@ import org.springframework.transaction.support.TransactionTemplate;
 
 import java.time.LocalDate;
 import java.util.Comparator;
+import java.util.EnumMap;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.regex.Pattern;
 
 /**
- * 여행의 예약 정보 (BE2): 숙소, 렌터카. 일정 생성·검증이 날짜별 숙소와 렌터카 쓰는 날을 기준으로 동선을 짠다.
+ * 여행의 예약 정보 (BE2): 항공, 숙소, 렌터카.
+ * 일정 생성·검증이 항공 도착·출발 시각, 날짜별 숙소, 렌터카 쓰는 날을 기준으로 동선을 짠다.
  */
 @Service
 @RequiredArgsConstructor
 public class ReservationService {
 
+    // 항공사 코드 2~3자 + 숫자 1~4자 (+ 끝 글자 하나). 예) KE723, 7C1301, KAL723
+    private static final Pattern FLIGHT_NUMBER = Pattern.compile("[A-Za-z0-9]{2,3}\\d{1,4}[A-Za-z]?");
+
     private final TripService tripService;
     private final PlaceMatcher placeMatcher;
+    private final FlightClient flightClient;
+    private final TripFlightRepository flightRepository;
     private final TripStayRepository stayRepository;
     private final TripRentalRepository rentalRepository;
     private final TransactionTemplate transactionTemplate;
@@ -44,6 +58,28 @@ public class ReservationService {
     public ReservationResponse get(Long userId, Long tripId) {
         tripService.findOwnedTrip(userId, tripId);   // 없는 여행·남의 여행이면 404
         return response(tripId);
+    }
+
+    // 항공편 찾기. 편명 모양이 아니면 AeroDataBox를 부르지 않는다 (없는 편명도 유닛을 씀)
+    public List<FlightInfo> findFlights(String number, LocalDate date) {
+        String n = number.replace(" ", "");
+        if (!FLIGHT_NUMBER.matcher(n).matches()) {
+            throw new BusinessException(ErrorCode.INVALID_INPUT, "편명 형식이 올바르지 않습니다. 예) KE723, 7C1301");
+        }
+        return flightClient.find(n, date);
+    }
+
+    // 가는 편·오는 편을 보낸 값으로 바꾼다 (null이면 없음). 찾기 결과를 그대로 받아서 AeroDataBox를 다시 부르지 않는다
+    public ReservationResponse putFlights(Long userId, Long tripId, FlightInfo outbound, FlightInfo returnFlight) {
+        tripService.findOwnedTrip(userId, tripId);
+        return transactionTemplate.execute(status -> {
+            Trip trip = lockTrip(tripId);
+            flightRepository.deleteAllByTripId(tripId);
+            entityManager.flush();   // 여행·방향별 1개(unique)라 새로 넣기 전에 지운 걸 먼저 반영
+            if (outbound != null) flightRepository.save(TripFlight.of(trip, FlightDirection.OUTBOUND, outbound));
+            if (returnFlight != null) flightRepository.save(TripFlight.of(trip, FlightDirection.RETURN, returnFlight));
+            return response(tripId);
+        });
     }
 
     // 숙소 전체를 보낸 목록으로 바꾼다. 구글(장소 정보)은 처음 들어온 숙소만 부르고, 기다리는 동안 DB 연결을 잡지 않는다
@@ -117,6 +153,9 @@ public class ReservationService {
                 .map(StayResponse::from)
                 .toList();
         RentalResponse rental = rentalRepository.findByTripId(tripId).map(RentalResponse::from).orElse(null);
-        return new ReservationResponse(tripId, stays, rental);
+        Map<FlightDirection, FlightInfo> flights = new EnumMap<>(FlightDirection.class);
+        for (TripFlight f : flightRepository.findAllByTripId(tripId)) flights.put(f.getDirection(), f.toInfo());
+        return new ReservationResponse(tripId,
+                new FlightsResponse(flights.get(FlightDirection.OUTBOUND), flights.get(FlightDirection.RETURN)), stays, rental);
     }
 }

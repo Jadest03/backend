@@ -16,12 +16,15 @@ import com.dotlo.line4thon_18team.place.PlaceMatcher;
 import com.dotlo.line4thon_18team.place.PlaceMatcher.Candidate;
 import com.dotlo.line4thon_18team.place.PlaceMatcher.MatchResult;
 import com.dotlo.line4thon_18team.place.PlaceMatcher.MatchStatus;
+import com.dotlo.line4thon_18team.reservation.dto.FlightInfo;
+import com.dotlo.line4thon_18team.reservation.dto.FlightInfo.Point;
 import com.dotlo.line4thon_18team.trip.entity.Companion;
 import com.dotlo.line4thon_18team.trip.entity.Trip;
 import com.dotlo.line4thon_18team.trip.repository.TripRepository;
 import com.dotlo.line4thon_18team.user.entity.User;
 import com.dotlo.line4thon_18team.user.repository.UserRepository;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -36,7 +39,8 @@ import org.springframework.test.web.servlet.ResultActions;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * 예약 정보 API (숙소, 렌터카). MySQL이 필요하다 (docker compose up -d). 구글 장소 정보는 가짜로 돌려준다.
+ * 예약 정보 API (항공, 숙소, 렌터카). MySQL이 필요하다 (docker compose up -d).
+ * 구글 장소 정보와 AeroDataBox 항공편은 가짜로 돌려준다.
  */
 @SpringBootTest
 @AutoConfigureMockMvc
@@ -52,6 +56,7 @@ class ReservationControllerTest {
     @Autowired UserRepository users;
     @Autowired TripRepository trips;
     @MockitoBean PlaceMatcher placeMatcher;
+    @MockitoBean FlightClient flightClient;
 
     private Long ownerId;
     private Long otherId;
@@ -234,8 +239,93 @@ class ReservationControllerTest {
         verify(placeMatcher, never()).details(any(), any());
     }
 
+    private static final String KE723 = "{\"number\":\"KE723\",\"airline\":\"Korean Air\","
+            + "\"departure\":{\"airport\":\"ICN\",\"time\":\"2026-05-18T09:30\",\"lat\":37.46,\"lng\":126.45},"
+            + "\"arrival\":{\"airport\":\"KIX\",\"time\":\"2026-05-18T11:20\",\"lat\":34.42,\"lng\":135.24}}";
+    private static final String KE724 = "{\"number\":\"KE724\",\"airline\":\"Korean Air\","
+            + "\"departure\":{\"airport\":\"KIX\",\"time\":\"2026-05-21T12:30\",\"lat\":34.42,\"lng\":135.24},"
+            + "\"arrival\":{\"airport\":\"ICN\",\"time\":\"2026-05-21T14:25\",\"lat\":37.46,\"lng\":126.45}}";
+
+    private ResultActions putFlights(Long userId, String body) throws Exception {
+        return mvc.perform(put("/api/trips/{tripId}/reservations/flights", tripId).header("X-User-Id", userId)
+                .contentType(MediaType.APPLICATION_JSON).content(body));
+    }
+
+    @Test
+    void 항공편을_편명과_날짜로_찾는다() throws Exception {
+        when(flightClient.find("KE723", LocalDate.of(2026, 5, 18))).thenReturn(List.of(new FlightInfo("KE723", "Korean Air",
+                new Point("ICN", LocalDateTime.of(2026, 5, 18, 9, 30), 37.46, 126.45),
+                new Point("KIX", LocalDateTime.of(2026, 5, 18, 11, 20), 34.42, 135.24))));
+
+        mvc.perform(get("/api/flights").param("number", "KE 723").param("date", "2026-05-18").header("X-User-Id", ownerId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].number").value("KE723"))
+                .andExpect(jsonPath("$[0].departure.airport").value("ICN"))
+                .andExpect(jsonPath("$[0].arrival.time").value("2026-05-18T11:20:00"));
+    }
+
+    @Test
+    void 편명_형식이_틀리거나_값이_빠지면_400이고_AeroDataBox를_부르지_않는다() throws Exception {
+        for (String number : new String[] {"", "abc", "KE", "KE723456"}) {
+            mvc.perform(get("/api/flights").param("number", number).param("date", "2026-05-18").header("X-User-Id", ownerId))
+                    .andExpect(status().isBadRequest())
+                    .andExpect(jsonPath("$.code").value("INVALID_INPUT"));
+        }
+        mvc.perform(get("/api/flights").param("number", "KE723").header("X-User-Id", ownerId))
+                .andExpect(status().isBadRequest());
+        mvc.perform(get("/api/flights").param("number", "KE723").param("date", "5/18").header("X-User-Id", ownerId))
+                .andExpect(status().isBadRequest());
+        verify(flightClient, never()).find(any(), any());
+    }
+
+    @Test
+    void 항공편_찾기는_로그인해야_한다() throws Exception {
+        mvc.perform(get("/api/flights").param("number", "KE723").param("date", "2026-05-18"))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void 가는_편만_저장하고_조회한다() throws Exception {
+        putFlights(ownerId, "{\"outbound\": " + KE723 + ", \"return\": null}")
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.flights.outbound.number").value("KE723"))
+                .andExpect(jsonPath("$.flights.outbound.arrival.time").value("2026-05-18T11:20:00"))
+                .andExpect(jsonPath("$.flights.return").doesNotExist());
+
+        mvc.perform(get("/api/trips/{tripId}/reservations", tripId).header("X-User-Id", ownerId))
+                .andExpect(jsonPath("$.flights.outbound.departure.airport").value("ICN"))
+                .andExpect(jsonPath("$.flights.outbound.arrival.lat").value(34.42));
+    }
+
+    @Test
+    void 항공권을_다시_저장하면_바뀌고_둘_다_비우면_지운다() throws Exception {
+        putFlights(ownerId, "{\"outbound\": " + KE723 + "}").andExpect(status().isOk());
+
+        putFlights(ownerId, "{\"outbound\": " + KE723 + ", \"return\": " + KE724 + "}")
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.flights.outbound.number").value("KE723"))
+                .andExpect(jsonPath("$.flights.return.number").value("KE724"));
+
+        putFlights(ownerId, "{}")
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.flights.outbound").doesNotExist())
+                .andExpect(jsonPath("$.flights.return").doesNotExist());
+    }
+
+    @Test
+    void 항공편_값이_빠지면_400이다() throws Exception {
+        putFlights(ownerId, "{\"outbound\": {\"number\":\"KE723\"}}")
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("INVALID_INPUT"));
+        putFlights(ownerId, "{\"outbound\": " + KE723.replace("\"time\":\"2026-05-18T09:30\",", "") + "}")
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("INVALID_INPUT"));
+    }
+
     @Test
     void 남의_여행이면_404다() throws Exception {
+        putFlights(otherId, "{}")
+                .andExpect(status().isNotFound());
         putStays(otherId, stays(stay(APA, "2026-05-18", "2026-05-21")))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.code").value("TRIP_NOT_FOUND"));

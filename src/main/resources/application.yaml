@@ -37,6 +37,10 @@ google:
     client-secret: ${GOOGLE_CLIENT_SECRET:}
     redirect-uri: ${GOOGLE_REDIRECT_URI:http://localhost:8080/login/oauth2/code/google}
 
+# 항공편 조회 (BE2 항공권, AeroDataBox - RapidAPI 키)
+aerodatabox:
+  api-key: ${AERODATABOX_API_KEY:}
+
 # JWT (BE1 로그인)
 jwt:
   secret: ${JWT_SECRET:}
