@@ -50,6 +50,10 @@ public enum ErrorCode {
     INVALID_LIST_URL(HttpStatus.BAD_REQUEST, "구글맵 공유 리스트 링크가 아닙니다."),
     LIST_NOT_ACCESSIBLE(HttpStatus.BAD_REQUEST, "리스트를 열 수 없습니다. 공개된 공유 리스트 링크인지 확인해 주세요."),
 
+    // ===== 예약 정보: 항공·숙소·렌터카 (BE2) =====
+    INVALID_STAY_DATES(HttpStatus.BAD_REQUEST, "숙소 날짜가 올바르지 않습니다. 여행 기간 안에서 숙소끼리 겹치지 않게 골라 주세요."),
+    INVALID_RENTAL(HttpStatus.BAD_REQUEST, "렌터카 정보가 올바르지 않습니다. 여행 기간 안의 날짜와 픽업 장소를 골라 주세요."),
+
     // ===== 일정·AI (BE3) =====
     PREFERENCE_TEXT_TOO_LONG(HttpStatus.BAD_REQUEST, "취향은 500자 이하로 입력해 주세요."),
     INVALID_PREFERENCE(HttpStatus.BAD_REQUEST, "취향 값이 올바르지 않습니다."),
