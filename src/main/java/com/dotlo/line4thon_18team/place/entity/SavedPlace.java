@@ -91,6 +91,11 @@ public class SavedPlace extends BaseTimeEntity {
         return imported(PlaceSource.SHARED_LINK, trip, featureId, name, note, googleUrl, latitude, longitude, listName);
     }
 
+    // BE2 장소 직접 추가: 검색해서 고른 장소. 구글 장소 정보는 applyMatch 로 채운다
+    public static SavedPlace fromSearch(Trip trip, String name, String listName) {
+        return imported(PlaceSource.MANUAL_SEARCH, trip, null, name, null, null, null, null, listName);
+    }
+
     private static SavedPlace imported(PlaceSource source, Trip trip, String featureId, String name, String note,
                                        String googleUrl, Double latitude, Double longitude, String listName) {
         SavedPlace place = new SavedPlace();

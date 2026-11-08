@@ -13,6 +13,8 @@ import com.dotlo.line4thon_18team.place.entity.SavedPlace;
 import com.dotlo.line4thon_18team.place.repository.SavedPlaceRepository;
 import com.dotlo.line4thon_18team.trip.entity.Trip;
 import com.dotlo.line4thon_18team.trip.service.TripService;
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.LockModeType;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -27,11 +29,13 @@ import org.springframework.transaction.support.TransactionTemplate;
 public class PlaceEnrichService {
 
     private static final int CITY_LIMIT_M = 50_000;
+    private static final String MANUAL_LIST = "직접 추가";   // 직접 추가한 장소의 리스트 이름
 
     private final TripService tripService;
     private final PlaceMatcher placeMatcher;
     private final SavedPlaceRepository savedPlaceRepository;
     private final TransactionTemplate transactionTemplate;
+    private final EntityManager entityManager;
 
     // ponytail: 장소마다 구글 검색 1번씩 순서대로 호출. 장소가 많아 느리면 병렬 호출로 바꾸기
     // 트랜잭션은 장소 1개 저장할 때만 연다. 구글을 기다리는 동안 DB 연결을 잡지 않고,
@@ -57,6 +61,42 @@ public class PlaceEnrichService {
         transactionTemplate.executeWithoutResult(status -> save(tripId, city, r, PlaceMatchStatus.NEEDS_REVIEW));
     }
 
+    // 장소 직접 추가: 검색해서 고른 구글 장소를 "직접 추가" 리스트로 저장한다.
+    // 이미 있는 장소면 새로 만들지 않고 "직접 추가" 리스트 이름만 붙인다
+    public void add(Long userId, Long tripId, String googlePlaceId) {
+        City city = cityOf(userId, tripId);
+        Boolean existing = transactionTemplate.execute(status -> {
+            lockTrip(tripId);
+            return addToManualList(tripId, googlePlaceId);   // 있으면 구글을 부르지 않는다
+        });
+        if (Boolean.TRUE.equals(existing)) return;
+
+        MatchResult r = placeMatcher.details(null, googlePlaceId);   // 없는 placeId면 400
+        Candidate c = r.place();
+        transactionTemplate.executeWithoutResult(status -> {
+            Trip trip = lockTrip(tripId);
+            // 그사이 같은 장소가 들어왔으면 (같은 요청 두 번, 업로드 후 보강) 리스트 이름만 붙인다
+            if (addToManualList(tripId, c.placeId())) return;
+            SavedPlace place = SavedPlace.fromSearch(trip, c.name(), MANUAL_LIST);
+            place.applyMatch(c.name(), c.placeId(), c.address(), c.lat(), c.lng(), r.category(), statusOf(city, r));
+            savedPlaceRepository.save(place);
+        });
+    }
+
+    // 이미 있는 장소면 "직접 추가" 리스트 이름을 붙이고 true. lockTrip 한 트랜잭션 안에서 부른다
+    private boolean addToManualList(Long tripId, String placeId) {
+        SavedPlace same = savedPlaceRepository.findFirstByTripIdAndPlaceId(tripId, placeId).orElse(null);
+        if (same == null) return false;
+        same.addListName(MANUAL_LIST);
+        return true;
+    }
+
+    // 여행 행을 잠가서 같은 여행의 추가·보강 저장을 한 번에 하나씩 처리한다. 안 잠그면 같은 장소가 2행 이상 생김
+    // (2026-11-06 추가 버튼 연달아 3번 → 2~3행, 2026-11-08 보강과 직접 추가 동시 → 20번 중 8번 2행)
+    private Trip lockTrip(Long tripId) {
+        return entityManager.find(Trip.class, tripId, LockModeType.PESSIMISTIC_WRITE);
+    }
+
     private City cityOf(Long userId, Long tripId) {
         Trip trip = tripService.findOwnedTrip(userId, tripId);   // 없는 여행·남의 여행이면 404
         return CityController.findByName(trip.getCity())
@@ -65,6 +105,7 @@ public class PlaceEnrichService {
 
     // from: 저장 직전에도 이 상태여야 저장한다
     private void save(Long tripId, City city, MatchResult r, PlaceMatchStatus from) {
+        lockTrip(tripId);
         SavedPlace place = savedPlaceRepository.findById(r.id()).orElse(null);
         // 그사이 사용자가 삭제했거나, 동시에 들어온 다른 요청이 먼저 처리한 장소.
         // 처리된 장소는 placeId 가 있어서, 그냥 진행하면 아래 중복 확인에서 자기 자신을 찾아 지운다
@@ -81,11 +122,16 @@ public class PlaceEnrichService {
             savedPlaceRepository.delete(place);
             return;
         }
-        PlaceMatchStatus status = r.closed() ? PlaceMatchStatus.CLOSED
-                : PlaceMatcher.meters(city.lat(), city.lng(), c.lat(), c.lng()) > CITY_LIMIT_M ? PlaceMatchStatus.OUT_OF_CITY
-                : PlaceMatchStatus.MATCHED;
         // 이름 없는 핀(이름이 좌표)은 구글 장소 이름으로
         String name = PlaceMatcher.isCoordinates(place.getName()) ? c.name() : place.getName();
-        place.applyMatch(name, c.placeId(), c.address(), c.lat(), c.lng(), r.category(), status);
+        place.applyMatch(name, c.placeId(), c.address(), c.lat(), c.lng(), r.category(), statusOf(city, r));
+    }
+
+    // 찾은 장소의 상태: 폐업이면 CLOSED, 여행 도시 중심 50km 밖이면 OUT_OF_CITY
+    private static PlaceMatchStatus statusOf(City city, MatchResult r) {
+        Candidate c = r.place();
+        if (r.closed()) return PlaceMatchStatus.CLOSED;
+        if (PlaceMatcher.meters(city.lat(), city.lng(), c.lat(), c.lng()) > CITY_LIMIT_M) return PlaceMatchStatus.OUT_OF_CITY;
+        return PlaceMatchStatus.MATCHED;
     }
 }
