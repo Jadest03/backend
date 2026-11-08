@@ -255,25 +255,29 @@ class PlaceEnrichServiceTest {
     }
 
     @Test
-    void 이미_있는_장소를_직접_추가하면_구글을_부르지_않고_저장하지_않는다() {
-        when(repository.findFirstByTripIdAndPlaceId(7L, "p1")).thenReturn(Optional.of(place(1L, "이치란", "오사카 맛집")));
+    void 이미_있는_장소를_직접_추가하면_구글을_부르지_않고_직접_추가_리스트_이름만_붙인다() {
+        SavedPlace existing = place(1L, "이치란", "오사카 맛집");
+        when(repository.findFirstByTripIdAndPlaceId(7L, "p1")).thenReturn(Optional.of(existing));
 
         service.add(1L, 7L, "p1");
 
+        assertThat(existing.getListNames()).containsExactlyInAnyOrder("오사카 맛집", "직접 추가");
         verify(placeMatcher, never()).details(any(), any());
         verify(repository, never()).save(any());
     }
 
     @Test
-    void 구글을_기다리는_사이_같은_장소가_들어왔으면_저장하지_않는다() {
+    void 구글을_기다리는_사이_같은_장소가_들어왔으면_새로_만들지_않고_리스트_이름만_붙인다() {
+        SavedPlace existing = place(1L, "이치란", "오사카 맛집");
         when(placeMatcher.details(null, "p1")).thenReturn(
                 matched(null, new Candidate("p1", "이치란", "오사카", 34.70, 135.50), PlaceCategory.FOOD, false));
         when(repository.findFirstByTripIdAndPlaceId(7L, "p1"))
-                .thenReturn(Optional.empty())                                   // 구글 부르기 전
-                .thenReturn(Optional.of(place(1L, "이치란", "오사카 맛집")));     // 저장 직전
+                .thenReturn(Optional.empty())                 // 구글 부르기 전
+                .thenReturn(Optional.of(existing));           // 저장 직전
 
         service.add(1L, 7L, "p1");
 
+        assertThat(existing.getListNames()).containsExactlyInAnyOrder("오사카 맛집", "직접 추가");
         verify(repository, never()).save(any());
     }
 

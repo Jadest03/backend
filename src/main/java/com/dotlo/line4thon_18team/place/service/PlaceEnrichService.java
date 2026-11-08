@@ -61,23 +61,40 @@ public class PlaceEnrichService {
         transactionTemplate.executeWithoutResult(status -> save(tripId, city, r, PlaceMatchStatus.NEEDS_REVIEW));
     }
 
-    // 장소 직접 추가: 검색해서 고른 구글 장소를 "직접 추가" 리스트로 저장한다. 이미 있는 장소면 아무것도 하지 않는다
+    // 장소 직접 추가: 검색해서 고른 구글 장소를 "직접 추가" 리스트로 저장한다.
+    // 이미 있는 장소면 새로 만들지 않고 "직접 추가" 리스트 이름만 붙인다
     public void add(Long userId, Long tripId, String googlePlaceId) {
         City city = cityOf(userId, tripId);
-        if (savedPlaceRepository.findFirstByTripIdAndPlaceId(tripId, googlePlaceId).isPresent()) return;   // 구글 호출 아끼기
+        Boolean existing = transactionTemplate.execute(status -> {
+            lockTrip(tripId);
+            return addToManualList(tripId, googlePlaceId);   // 있으면 구글을 부르지 않는다
+        });
+        if (Boolean.TRUE.equals(existing)) return;
 
         MatchResult r = placeMatcher.details(null, googlePlaceId);   // 없는 placeId면 400
         Candidate c = r.place();
         transactionTemplate.executeWithoutResult(status -> {
-            // 여행 행을 잠가서 같은 여행의 추가를 한 번에 하나씩 처리한다.
-            // 안 잠그면 추가 버튼을 연달아 눌렀을 때 둘 다 "없음"으로 보고 같은 장소가 2~3행 생김 (2026-11-06 확인)
-            Trip trip = entityManager.find(Trip.class, tripId, LockModeType.PESSIMISTIC_WRITE);
-            // 그사이 같은 장소가 들어왔으면 (같은 요청 두 번, 업로드 후 보강) 추가하지 않는다
-            if (savedPlaceRepository.findFirstByTripIdAndPlaceId(tripId, c.placeId()).isPresent()) return;
+            Trip trip = lockTrip(tripId);
+            // 그사이 같은 장소가 들어왔으면 (같은 요청 두 번, 업로드 후 보강) 리스트 이름만 붙인다
+            if (addToManualList(tripId, c.placeId())) return;
             SavedPlace place = SavedPlace.fromSearch(trip, c.name(), MANUAL_LIST);
             place.applyMatch(c.name(), c.placeId(), c.address(), c.lat(), c.lng(), r.category(), statusOf(city, r));
             savedPlaceRepository.save(place);
         });
+    }
+
+    // 이미 있는 장소면 "직접 추가" 리스트 이름을 붙이고 true. lockTrip 한 트랜잭션 안에서 부른다
+    private boolean addToManualList(Long tripId, String placeId) {
+        SavedPlace same = savedPlaceRepository.findFirstByTripIdAndPlaceId(tripId, placeId).orElse(null);
+        if (same == null) return false;
+        same.addListName(MANUAL_LIST);
+        return true;
+    }
+
+    // 여행 행을 잠가서 같은 여행의 추가·보강 저장을 한 번에 하나씩 처리한다. 안 잠그면 같은 장소가 2행 이상 생김
+    // (2026-11-06 추가 버튼 연달아 3번 → 2~3행, 2026-11-08 보강과 직접 추가 동시 → 20번 중 8번 2행)
+    private Trip lockTrip(Long tripId) {
+        return entityManager.find(Trip.class, tripId, LockModeType.PESSIMISTIC_WRITE);
     }
 
     private City cityOf(Long userId, Long tripId) {
@@ -88,8 +105,7 @@ public class PlaceEnrichService {
 
     // from: 저장 직전에도 이 상태여야 저장한다
     private void save(Long tripId, City city, MatchResult r, PlaceMatchStatus from) {
-        // 직접 추가와 같은 여행 잠금. 안 잠그면 보강과 직접 추가가 같은 장소를 동시에 저장할 때 2행이 됨 (2026-11-08 20번 중 8번)
-        entityManager.find(Trip.class, tripId, LockModeType.PESSIMISTIC_WRITE);
+        lockTrip(tripId);
         SavedPlace place = savedPlaceRepository.findById(r.id()).orElse(null);
         // 그사이 사용자가 삭제했거나, 동시에 들어온 다른 요청이 먼저 처리한 장소.
         // 처리된 장소는 placeId 가 있어서, 그냥 진행하면 아래 중복 확인에서 자기 자신을 찾아 지운다
