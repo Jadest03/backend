@@ -266,7 +266,7 @@ class ReservationControllerTest {
 
     @Test
     void 편명_형식이_틀리거나_값이_빠지면_400이고_AeroDataBox를_부르지_않는다() throws Exception {
-        for (String number : new String[] {"", "abc", "KE", "KE723456"}) {
+        for (String number : new String[] {"", "abc", "KE", "KE723456", "12345", "999", "KE72345"}) {
             mvc.perform(get("/api/flights").param("number", number).param("date", "2026-05-18").header("X-User-Id", ownerId))
                     .andExpect(status().isBadRequest())
                     .andExpect(jsonPath("$.code").value("INVALID_INPUT"));
@@ -276,6 +276,15 @@ class ReservationControllerTest {
         mvc.perform(get("/api/flights").param("number", "KE723").param("date", "5/18").header("X-User-Id", ownerId))
                 .andExpect(status().isBadRequest());
         verify(flightClient, never()).find(any(), any());
+    }
+
+    @Test
+    void 여러_모양의_항공사_코드를_받는다() throws Exception {
+        for (String number : new String[] {"KE723", "W61234", "7C1301", "KAL723", "KE7234A"}) {
+            mvc.perform(get("/api/flights").param("number", number).param("date", "2026-05-18").header("X-User-Id", ownerId))
+                    .andExpect(status().isOk());
+            verify(flightClient).find(number, LocalDate.of(2026, 5, 18));
+        }
     }
 
     @Test

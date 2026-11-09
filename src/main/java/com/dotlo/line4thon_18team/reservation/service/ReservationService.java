@@ -43,8 +43,9 @@ import java.util.regex.Pattern;
 @RequiredArgsConstructor
 public class ReservationService {
 
-    // 항공사 코드 2~3자 + 숫자 1~4자 (+ 끝 글자 하나). 예) KE723, 7C1301, KAL723
-    private static final Pattern FLIGHT_NUMBER = Pattern.compile("[A-Za-z0-9]{2,3}\\d{1,4}[A-Za-z]?");
+    // 항공사 코드(영문 2자, 영문+숫자, 숫자+영문, 영문 3자) + 숫자 1~4자 (+ 끝 글자 하나). 예) KE723, W61234, 7C1301, KAL723
+    // 코드에 영문이 없으면 "12345"가 "12"+"345"로 통과해서 AeroDataBox 한도를 씀 (#60 리뷰)
+    private static final Pattern FLIGHT_NUMBER = Pattern.compile("(?:[A-Za-z][A-Za-z0-9]|\\d[A-Za-z]|[A-Za-z]{3})\\d{1,4}[A-Za-z]?");
 
     private final TripService tripService;
     private final PlaceMatcher placeMatcher;
