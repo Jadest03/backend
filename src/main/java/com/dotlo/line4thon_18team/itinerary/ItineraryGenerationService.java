@@ -11,8 +11,6 @@ import com.dotlo.line4thon_18team.itinerary.validation.model.DayDraft;
 import com.dotlo.line4thon_18team.itinerary.validation.model.ItineraryDraft;
 import com.dotlo.line4thon_18team.itinerary.validation.model.ValidationOrigin;
 import com.dotlo.line4thon_18team.itinerary.validation.model.VisitDraft;
-import com.dotlo.line4thon_18team.itinerary.validation.result.Severity;
-import com.dotlo.line4thon_18team.itinerary.validation.result.ValidationIssue;
 import com.dotlo.line4thon_18team.itinerary.validation.result.ValidationResult;
 import com.dotlo.line4thon_18team.place.entity.PlaceMatchStatus;
 import com.dotlo.line4thon_18team.place.entity.SavedPlace;
@@ -28,7 +26,6 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.UUID;
 
 /**
  * AI 일정 생성 (GEN-PLAN-001).
@@ -105,55 +102,21 @@ public class ItineraryGenerationService {
         for (PlanGenerationOutput.Day day : plan.days()) {
             LocalDate date = startDate.plusDays(day.dayNumber() - 1L);
             List<VisitDraft> visits = day.placeNumbers().stream()
-                    .map(number -> VisitDraft.of(newItemId(), input.byNumber(number).placeId()))
+                    .map(number -> VisitDraft.of(ItineraryItemId.newId(), input.byNumber(number).placeId()))
                     .toList();
             days.add(new DayDraft(date, visits));
         }
         return new ItineraryDraft(days);
     }
 
-    /*
-     * 일정 항목 ID. 좋아요·댓글이 이 값을 기준으로 달려서, 나중에 일정을 고쳐도 그대로인 장소는 같은 ID를 유지해야 한다.
-     * DB가 매기는 번호를 쓰면 저장할 때마다 바뀌므로 여기서 만들어 둔다.
-     */
-    private static String newItemId() {
-        return "v-" + UUID.randomUUID().toString().substring(0, 8);
-    }
-
     private static List<String> placeIds(List<Integer> numbers, PlanGenerationInput input) {
         return numbers.stream().map(number -> input.byNumber(number).placeId()).toList();
     }
 
-    /** 검증에 걸린 내용을 모델이 읽을 문장으로 바꾼다. */
     private static List<String> describe(ValidationResult validation, ItineraryDraft draft,
                                          PlanGenerationInput input) {
         Map<String, String> nameByPlaceId = new LinkedHashMap<>();
         input.places().forEach(place -> nameByPlaceId.put(place.placeId(), place.name()));
-        Map<String, String> placeIdByItemId = new LinkedHashMap<>();
-        draft.days().forEach(day -> day.visits()
-                .forEach(visit -> placeIdByItemId.put(visit.itemId(), visit.placeId())));
-
-        List<String> problems = new ArrayList<>();
-        for (ValidationIssue issue : validation.issues()) {
-            if (issue.severity() != Severity.ERROR) {
-                continue;
-            }
-            String placeId = issue.placeId() != null ? issue.placeId() : placeIdByItemId.get(issue.itemId());
-            String name = nameByPlaceId.getOrDefault(placeId, "(장소 미상)");
-            problems.add(issue.date() + " " + name + ": " + reason(issue));
-        }
-        return problems;
-    }
-
-    private static String reason(ValidationIssue issue) {
-        return switch (issue.code()) {
-            case OUTSIDE_OPENING_HOURS -> "영업시간에 맞지 않습니다 (도착 " + issue.params().get("arrival")
-                    + ", 영업 " + issue.params().get("openingHours") + ")";
-            case CLOSED_ON_DAY -> "그날 휴무입니다";
-            case FIXED_TIME_MISSED -> "예약 시각보다 늦게 도착합니다";
-            case LONG_WAIT -> "문 열 때까지 " + issue.params().get("waitMinutes") + "분을 기다려야 합니다";
-            case DAY_OVERFLOW -> "그날 일정이 " + issue.params().get("overflowMinutes") + "분 넘칩니다. 장소를 줄이거나 다른 날로 옮기세요";
-            default -> issue.code().name();
-        };
+        return ItineraryProblems.describe(validation, draft, nameByPlaceId);
     }
 }

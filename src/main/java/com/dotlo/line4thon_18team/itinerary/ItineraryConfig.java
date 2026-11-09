@@ -1,6 +1,7 @@
 package com.dotlo.line4thon_18team.itinerary;
 
 import com.dotlo.line4thon_18team.global.llm.schema.SchemaLoader;
+import com.dotlo.line4thon_18team.itinerary.ai.PlanEditTask;
 import com.dotlo.line4thon_18team.itinerary.ai.PlanGenerationTask;
 import com.dotlo.line4thon_18team.itinerary.validation.ValidationPolicy;
 import com.dotlo.line4thon_18team.itinerary.validation.port.TravelTimeProvider;
@@ -29,5 +30,10 @@ public class ItineraryConfig {
     @Bean
     public PlanGenerationTask planGenerationTask(SchemaLoader schemaLoader) {
         return new PlanGenerationTask(schemaLoader);
+    }
+
+    @Bean
+    public PlanEditTask planEditTask(SchemaLoader schemaLoader) {
+        return new PlanEditTask(schemaLoader);
     }
 }

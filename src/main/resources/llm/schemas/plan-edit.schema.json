@@ -1,0 +1,42 @@
+{
+  "type": "object",
+  "description": "사용자 요청에 맞게 고친 일정 전체",
+  "additionalProperties": false,
+  "required": ["days"],
+  "properties": {
+    "days": {
+      "type": "array",
+      "description": "일차별 방문. 1일차부터 마지막 날까지 빠짐없이 넣는다",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["dayNumber", "visits"],
+        "properties": {
+          "dayNumber": {
+            "type": "integer",
+            "description": "며칠째인지. 1부터 시작"
+          },
+          "visits": {
+            "type": "array",
+            "description": "그날 방문을 순서대로. 갈 곳이 없는 날은 빈 배열",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["itemId", "placeNumber"],
+              "properties": {
+                "itemId": {
+                  "type": ["string", "null"],
+                  "description": "지금 일정에 있던 방문을 그대로 둘 때, 받은 itemId를 그대로 적는다. 새로 넣는 장소면 null"
+                },
+                "placeNumber": {
+                  "type": ["integer", "null"],
+                  "description": "새로 넣는 장소 번호. 지금 일정에 있던 방문이면 null"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
