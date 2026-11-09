@@ -54,6 +54,10 @@ public enum ErrorCode {
     INVALID_STAY_DATES(HttpStatus.BAD_REQUEST, "숙소 날짜가 올바르지 않습니다. 여행 기간 안에서 숙소끼리 겹치지 않게 골라 주세요."),
     INVALID_RENTAL(HttpStatus.BAD_REQUEST, "렌터카 정보가 올바르지 않습니다. 여행 기간 안의 날짜와 픽업 장소를 골라 주세요."),
 
+    // ===== 일정 좋아요·댓글 (BE2) =====
+    ITEM_NOT_FOUND(HttpStatus.NOT_FOUND, "일정 항목을 찾을 수 없습니다."),
+    COMMENT_NOT_FOUND(HttpStatus.NOT_FOUND, "댓글을 찾을 수 없습니다."),
+
     // ===== 일정·AI (BE3) =====
     PREFERENCE_TEXT_TOO_LONG(HttpStatus.BAD_REQUEST, "취향은 500자 이하로 입력해 주세요."),
     INVALID_PREFERENCE(HttpStatus.BAD_REQUEST, "취향 값이 올바르지 않습니다."),
