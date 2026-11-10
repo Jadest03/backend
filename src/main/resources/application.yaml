@@ -51,6 +51,10 @@ jwt:
 auth:
   dev-header-enabled: ${AUTH_DEV_HEADER_ENABLED:false}
 
+# 요청을 허용할 프론트 주소 (BE1 CORS). 여러 개는 쉼표로
+cors:
+  allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:5173}
+
 # ===== AI (BE3) =====
 # OpenAI 키는 .env 의 OPENAI_API_KEY 로 넣는다. CI 에는 키가 없으므로 기본값은 빈 값이고,
 # 서버가 시작할 때는 OpenAI 를 호출하지 않는다. (키가 없으면 취향 해석은 기본값으로 진행)

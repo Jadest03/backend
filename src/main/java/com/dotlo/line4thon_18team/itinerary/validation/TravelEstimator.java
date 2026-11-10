@@ -30,9 +30,12 @@ public final class TravelEstimator {
     /** 직선거리 × 우회 계수 ÷ 속도 (+ 대중교통 대기). 최소 1분. */
     public int estimateMinutes(double straightMeters, TravelMode mode) {
         double routeMeters = straightMeters * policy.detourFactor();
-        double minutes = mode == TravelMode.WALK
-                ? routeMeters / policy.walkMetersPerMinute()
-                : policy.transitOverheadMinutes() + routeMeters / policy.transitMetersPerMinute();
+        // 운전은 대중교통과 비슷한 속도로 보되 환승·대기 시간은 빼고 센다
+        double minutes = switch (mode) {
+            case WALK -> routeMeters / policy.walkMetersPerMinute();
+            case DRIVE -> routeMeters / policy.transitMetersPerMinute();
+            case TRANSIT -> policy.transitOverheadMinutes() + routeMeters / policy.transitMetersPerMinute();
+        };
         return (int) Math.max(1, Math.ceil(minutes));
     }
 

@@ -11,6 +11,7 @@ import java.time.LocalDate;
 import java.time.LocalTime;
 import java.time.ZoneId;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 /**
@@ -28,6 +29,10 @@ public final class OsakaFixtures {
 
     public static final GeoPoint HOTEL_NAMBA = new GeoPoint(34.6656, 135.5013);
     public static final GeoPoint KIX = new GeoPoint(34.4347, 135.2440);
+    /** 이타미 공항. 간사이와 다른 공항으로 들어오거나 나가는 경우에 쓴다 */
+    public static final GeoPoint ITAMI = new GeoPoint(34.7855, 135.4382);
+    /** 난바에서 약 4.5km 북쪽 */
+    public static final GeoPoint HOTEL_UMEDA = new GeoPoint(34.7055, 135.4983);
 
     /** 숙소에서 약 340m, 24시간 */
     public static final PlaceInfo DOTONBORI = new PlaceInfo("p-dotonbori", "도톤보리",
@@ -65,9 +70,33 @@ public final class OsakaFixtures {
     private OsakaFixtures() {
     }
 
-    /** 항공 정보 없는 3박 4일 */
+    /** 항공 정보 없고 숙소도 입력하지 않은 3박 4일. 난바를 기준점으로 쓴다 */
     public static TripContext trip() {
-        return new TripContext(ZONE, DAY1, DAY4, HOTEL_NAMBA, KIX, null, null);
+        return TripContext.withoutStays(ZONE, DAY1, DAY4, HOTEL_NAMBA, KIX, null, null);
+    }
+
+    /** 3박 모두 난바에서 묵는 3박 4일 */
+    public static TripContext tripStayingAtNamba() {
+        return new TripContext(ZONE, DAY1, DAY4,
+                Map.of(DAY1, HOTEL_NAMBA, DAY2, HOTEL_NAMBA, DAY3, HOTEL_NAMBA),
+                HOTEL_NAMBA, KIX, KIX, Set.of(), null, null);
+    }
+
+    /**
+     * 앞 이틀은 난바, 셋째 날 밤은 우메다. 3일차가 난바에서 출발해 우메다에서 끝나는 날이다.
+     * 도시를 옮기는 상황을 작게 줄인 것이다 (좌표는 같은 오사카 안이지만 4.5km 떨어져 있다).
+     */
+    public static TripContext tripMovingToUmeda() {
+        return new TripContext(ZONE, DAY1, DAY4,
+                Map.of(DAY1, HOTEL_NAMBA, DAY2, HOTEL_NAMBA, DAY3, HOTEL_UMEDA),
+                HOTEL_NAMBA, KIX, KIX, Set.of(), null, null);
+    }
+
+    /** 3박 모두 난바에 묵고, 2일차에 렌터카를 빌린 3박 4일 */
+    public static TripContext tripWithRentalOnDay2() {
+        return new TripContext(ZONE, DAY1, DAY4,
+                Map.of(DAY1, HOTEL_NAMBA, DAY2, HOTEL_NAMBA, DAY3, HOTEL_NAMBA),
+                HOTEL_NAMBA, KIX, KIX, Set.of(DAY2), null, null);
     }
 
     public static FakePlaceInfoProvider places() {

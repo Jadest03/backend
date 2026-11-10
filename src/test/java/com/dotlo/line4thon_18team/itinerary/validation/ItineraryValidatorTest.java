@@ -334,7 +334,7 @@ class ItineraryValidatorTest {
 
     @Test
     void 첫날_도착_시각이_반영된다() {
-        TripContext arriving = new TripContext(ZONE, DAY1, DAY4, HOTEL_NAMBA, KIX, DAY1.atTime(13, 0), null);
+        TripContext arriving = TripContext.withoutStays(ZONE, DAY1, DAY4, HOTEL_NAMBA, KIX, DAY1.atTime(13, 0), null);
 
         ValidationResult result = newValidator(travel).validate(
                 ItineraryDraft.of(day(DAY1, visit("d1", DOTONBORI))), arriving, NORMAL, ValidationOrigin.AI_GENERATED);

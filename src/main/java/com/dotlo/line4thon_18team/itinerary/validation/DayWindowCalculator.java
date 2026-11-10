@@ -64,26 +64,34 @@ public final class DayWindowCalculator {
 
     private LocalDateTime readyAfterArrival(TripContext trip) {
         LocalDateTime leaveAirport = trip.arrivalAt().plusMinutes(policy.arrivalProcessingMinutes());
-        int transfer = transferMinutes(trip, trip.airport(), trip.hotel(), leaveAirport);
+        int transfer = transferMinutes(trip, trip.startDate(), trip.arrivalAirport(),
+                trip.endOf(trip.startDate()), leaveAirport);
         return leaveAirport.plusMinutes(transfer + policy.settleMinutes());
     }
 
     private LocalDateTime backAtHotelBeforeDeparture(TripContext trip) {
         LocalDateTime atAirportBy = trip.departureAt().minusMinutes(policy.departureCheckinMinutes());
         LocalDateTime roughDeparture = atAirportBy.minusMinutes(policy.defaultAirportTransferMinutes());
-        int transfer = transferMinutes(trip, trip.hotel(), trip.airport(), roughDeparture);
+        int transfer = transferMinutes(trip, trip.endDate(), trip.startOf(trip.endDate()),
+                trip.departureAirport(), roughDeparture);
         return atAirportBy.minusMinutes(transfer + policy.luggagePickupMinutes());
     }
 
-    private int transferMinutes(TripContext trip, GeoPoint from, GeoPoint to, LocalDateTime departAt) {
+    /*
+     * 공항↔숙소 이동. 렌터카를 빌린 날은 운전으로 본다 (픽업·반납을 공항에서 하는 흐름).
+     * 조회가 실패해 직선거리로 추정할 때도 같은 수단으로 맞춘다. 수단이 갈리면 마감 시각이 어긋난다.
+     */
+    private int transferMinutes(TripContext trip, LocalDate date, GeoPoint from, GeoPoint to,
+                                LocalDateTime departAt) {
         if (from == null || to == null) {
             return policy.defaultAirportTransferMinutes();
         }
+        TravelMode mode = trip.drivingOn(date) ? TravelMode.DRIVE : TravelMode.TRANSIT;
         TravelLookup lookup = TravelLookups.safe(travel,
-                new TravelQuery(from, to, TravelMode.TRANSIT, departAt.atZone(trip.zone())));
+                new TravelQuery(from, to, mode, departAt.atZone(trip.zone())));
         if (lookup.status() == TravelLookup.Status.OK) {
             return lookup.durationMinutes();
         }
-        return estimator.estimateMinutes(TravelEstimator.straightLineMeters(from, to), TravelMode.TRANSIT);
+        return estimator.estimateMinutes(TravelEstimator.straightLineMeters(from, to), mode);
     }
 }

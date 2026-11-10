@@ -15,11 +15,14 @@ import org.junit.jupiter.api.Test;
 
 import java.time.LocalTime;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 
 import static com.dotlo.line4thon_18team.itinerary.validation.support.OsakaFixtures.DAY1;
 import static com.dotlo.line4thon_18team.itinerary.validation.support.OsakaFixtures.DAY2;
 import static com.dotlo.line4thon_18team.itinerary.validation.support.OsakaFixtures.DAY4;
 import static com.dotlo.line4thon_18team.itinerary.validation.support.OsakaFixtures.HOTEL_NAMBA;
+import static com.dotlo.line4thon_18team.itinerary.validation.support.OsakaFixtures.ITAMI;
 import static com.dotlo.line4thon_18team.itinerary.validation.support.OsakaFixtures.KIX;
 import static com.dotlo.line4thon_18team.itinerary.validation.support.OsakaFixtures.ZONE;
 import static com.dotlo.line4thon_18team.itinerary.validation.support.OsakaFixtures.trip;
@@ -54,7 +57,7 @@ class DayWindowCalculatorTest {
 
     @Test
     void 도착일은_입국_공항이동_짐정리_뒤부터_시작한다() {
-        TripContext trip = new TripContext(ZONE, DAY1, DAY4, HOTEL_NAMBA, KIX, DAY1.atTime(13, 0), null);
+        TripContext trip = TripContext.withoutStays(ZONE, DAY1, DAY4, HOTEL_NAMBA, KIX, DAY1.atTime(13, 0), null);
 
         List<DayWindow> windows = calculator.calculate(trip, PreferenceProfile.defaults());
 
@@ -73,7 +76,7 @@ class DayWindowCalculatorTest {
 
     @Test
     void 출발일은_공항에_가기_전에_숙소로_돌아오는_시각까지다() {
-        TripContext trip = new TripContext(ZONE, DAY1, DAY4, HOTEL_NAMBA, KIX, null, DAY4.atTime(15, 0));
+        TripContext trip = TripContext.withoutStays(ZONE, DAY1, DAY4, HOTEL_NAMBA, KIX, null, DAY4.atTime(15, 0));
 
         List<DayWindow> windows = calculator.calculate(trip, PreferenceProfile.defaults());
 
@@ -84,8 +87,43 @@ class DayWindowCalculatorTest {
     }
 
     @Test
+    void 들어오는_공항과_나가는_공항이_다르면_각각_그_공항을_쓴다() {
+        // 이타미로 들어와 간사이로 나가는 경우. 마지막 날 마감이 입국 공항 기준으로 잡히면 안 된다
+        TripContext trip = new TripContext(ZONE, DAY1, DAY4, Map.of(), HOTEL_NAMBA,
+                ITAMI, KIX, Set.of(), DAY1.atTime(13, 0), DAY4.atTime(15, 0));
+
+        calculator.calculate(trip, PreferenceProfile.defaults());
+
+        List<TravelQuery> queries = travel.queries();
+        assertThat(queries.get(0).from()).isEqualTo(ITAMI);
+        assertThat(queries.get(0).to()).isEqualTo(HOTEL_NAMBA);
+        assertThat(queries.get(1).from()).isEqualTo(HOTEL_NAMBA);
+        assertThat(queries.get(1).to()).isEqualTo(KIX);
+    }
+
+    @Test
+    void 렌터카를_빌린_출국일은_공항_이동도_운전으로_묻는다() {
+        TripContext trip = new TripContext(ZONE, DAY1, DAY4, Map.of(), HOTEL_NAMBA,
+                KIX, KIX, Set.of(DAY4), null, DAY4.atTime(15, 0));
+
+        calculator.calculate(trip, PreferenceProfile.defaults());
+
+        assertThat(travel.queries().get(0).mode()).isEqualTo(TravelMode.DRIVE);
+    }
+
+    @Test
+    void 렌터카가_없는_날의_공항_이동은_대중교통으로_묻는다() {
+        TripContext trip = new TripContext(ZONE, DAY1, DAY4, Map.of(), HOTEL_NAMBA,
+                KIX, KIX, Set.of(), null, DAY4.atTime(15, 0));
+
+        calculator.calculate(trip, PreferenceProfile.defaults());
+
+        assertThat(travel.queries().get(0).mode()).isEqualTo(TravelMode.TRANSIT);
+    }
+
+    @Test
     void 밤늦게_도착하면_첫날은_일정을_넣을_시간이_없다() {
-        TripContext trip = new TripContext(ZONE, DAY1, DAY4, HOTEL_NAMBA, KIX, DAY1.atTime(22, 30), null);
+        TripContext trip = TripContext.withoutStays(ZONE, DAY1, DAY4, HOTEL_NAMBA, KIX, DAY1.atTime(22, 30), null);
 
         List<DayWindow> windows = calculator.calculate(trip, PreferenceProfile.defaults());
 
@@ -96,7 +134,7 @@ class DayWindowCalculatorTest {
 
     @Test
     void 공항_좌표가_없으면_기본_이동시간을_쓴다() {
-        TripContext trip = new TripContext(ZONE, DAY1, DAY4, HOTEL_NAMBA, null, DAY1.atTime(13, 0), null);
+        TripContext trip = TripContext.withoutStays(ZONE, DAY1, DAY4, HOTEL_NAMBA, null, DAY1.atTime(13, 0), null);
 
         List<DayWindow> windows = calculator.calculate(trip, PreferenceProfile.defaults());
 
@@ -109,7 +147,7 @@ class DayWindowCalculatorTest {
         FakeTravelTimeProvider failing = FakeTravelTimeProvider.fixedMinutes(50)
                 .override(KIX, HOTEL_NAMBA, TravelLookup.error("quota"));
         DayWindowCalculator calc = new DayWindowCalculator(failing, ValidationPolicy.defaults());
-        TripContext trip = new TripContext(ZONE, DAY1, DAY4, HOTEL_NAMBA, KIX, DAY1.atTime(9, 0), null);
+        TripContext trip = TripContext.withoutStays(ZONE, DAY1, DAY4, HOTEL_NAMBA, KIX, DAY1.atTime(9, 0), null);
         int estimated = new TravelEstimator(ValidationPolicy.defaults())
                 .estimateMinutes(TravelEstimator.straightLineMeters(KIX, HOTEL_NAMBA), TravelMode.TRANSIT);
 

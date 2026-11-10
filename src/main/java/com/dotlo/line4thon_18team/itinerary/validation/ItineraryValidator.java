@@ -100,7 +100,7 @@ public final class ItineraryValidator {
                                  Map<String, PlaceInfo> placeInfos, Issues issues) {
         LocalDate date = day.date();
         LocalDateTime cursor = window.start();
-        GeoPoint previousLocation = trip.hotel();
+        GeoPoint previousLocation = trip.startOf(date);
         List<ScheduledVisit> visits = new ArrayList<>();
 
         for (int i = 0; i < day.visits().size(); i++) {
@@ -134,7 +134,7 @@ public final class ItineraryValidator {
             return new DayTimeline(date, window, visits, null, window.start());
         }
         ScheduledVisit last = visits.get(visits.size() - 1);
-        TravelLeg returnLeg = leg(previousLocation, trip.hotel(), last.end(), trip, preferences, null, date, null);
+        TravelLeg returnLeg = leg(previousLocation, trip.endOf(date), last.end(), trip, preferences, null, date, null);
         LocalDateTime endsAt = last.end().plusMinutes(returnLeg.minutes());
         if (endsAt.isAfter(window.end())) {
             issues.add(IssueCode.DAY_OVERFLOW, date, null, params(
@@ -215,8 +215,10 @@ public final class ItineraryValidator {
         if (straight <= policy.sameSpotMeters()) {
             return new TravelLeg(TravelMode.WALK, 0, (int) Math.round(straight), LegSource.SAME_SPOT);
         }
+        // 렌터카를 빌린 날이라도 걸어갈 거리는 걷는다. 차를 쓰는 건 걷기 기준을 넘는 구간뿐이다
+        TravelMode longLeg = trip.drivingOn(date) ? TravelMode.DRIVE : TravelMode.TRANSIT;
         TravelMode mode = straight <= policy.walkThresholdMeters(preferences.walking())
-                ? TravelMode.WALK : TravelMode.TRANSIT;
+                ? TravelMode.WALK : longLeg;
         TravelLookup lookup = TravelLookups.safe(travel,
                 new TravelQuery(from, to, mode, departAt.atZone(trip.zone())));
         if (lookup.status() == TravelLookup.Status.OK) {

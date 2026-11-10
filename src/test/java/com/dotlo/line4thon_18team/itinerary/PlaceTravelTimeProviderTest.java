@@ -63,6 +63,30 @@ class PlaceTravelTimeProviderTest {
         assertThat(lookup.distanceMeters()).isEqualTo(expected).isGreaterThan(0);
     }
 
+    @Test
+    void 운전을_물으면_자동차_경로를_쓴다() {
+        StubTravelTime be2 = new StubTravelTime(new TravelTime.Leg(18, TravelTime.Mode.DRIVE, false));
+        PlaceTravelTimeProvider provider = new PlaceTravelTimeProvider(be2, ValidationPolicy.defaults());
+
+        TravelLookup lookup = provider.lookup(new TravelQuery(NAMBA, OSAKA_CASTLE, TravelMode.DRIVE, DEPART));
+
+        assertThat(lookup.mode()).isEqualTo(TravelMode.DRIVE);
+        assertThat(lookup.durationMinutes()).isEqualTo(18);
+        assertThat(be2.driveCalls).isEqualTo(1);
+        assertThat(be2.departure).isNull();   // 자동차는 출발 시각을 받지 않는다
+    }
+
+    @Test
+    void 운전이_아니면_자동차_경로를_부르지_않는다() {
+        StubTravelTime be2 = new StubTravelTime(new TravelTime.Leg(12, TravelTime.Mode.TRANSIT, false));
+        PlaceTravelTimeProvider provider = new PlaceTravelTimeProvider(be2, ValidationPolicy.defaults());
+
+        provider.lookup(new TravelQuery(NAMBA, OSAKA_CASTLE, TravelMode.TRANSIT, DEPART));
+
+        assertThat(be2.driveCalls).isZero();
+        assertThat(be2.departure).isEqualTo(DEPART.toInstant());
+    }
+
     // BE2 TravelTime 대신 정해진 값을 돌려주고 받은 값을 기록한다 (Google API를 부르지 않음)
     static class StubTravelTime extends TravelTime {
 
@@ -70,6 +94,7 @@ class PlaceTravelTimeProviderTest {
         LatLng from;
         LatLng to;
         Instant departure;
+        int driveCalls;
 
         StubTravelTime(TravelTime.Leg result) {
             super("");
@@ -81,6 +106,14 @@ class PlaceTravelTimeProviderTest {
             this.from = from;
             this.to = to;
             this.departure = departure;
+            return result;
+        }
+
+        @Override
+        public TravelTime.Leg drive(LatLng from, LatLng to) {
+            this.from = from;
+            this.to = to;
+            this.driveCalls++;
             return result;
         }
     }
