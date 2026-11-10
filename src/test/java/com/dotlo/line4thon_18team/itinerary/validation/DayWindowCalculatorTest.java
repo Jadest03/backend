@@ -54,7 +54,7 @@ class DayWindowCalculatorTest {
 
     @Test
     void 도착일은_입국_공항이동_짐정리_뒤부터_시작한다() {
-        TripContext trip = new TripContext(ZONE, DAY1, DAY4, HOTEL_NAMBA, KIX, DAY1.atTime(13, 0), null);
+        TripContext trip = TripContext.withoutStays(ZONE, DAY1, DAY4, HOTEL_NAMBA, KIX, DAY1.atTime(13, 0), null);
 
         List<DayWindow> windows = calculator.calculate(trip, PreferenceProfile.defaults());
 
@@ -73,7 +73,7 @@ class DayWindowCalculatorTest {
 
     @Test
     void 출발일은_공항에_가기_전에_숙소로_돌아오는_시각까지다() {
-        TripContext trip = new TripContext(ZONE, DAY1, DAY4, HOTEL_NAMBA, KIX, null, DAY4.atTime(15, 0));
+        TripContext trip = TripContext.withoutStays(ZONE, DAY1, DAY4, HOTEL_NAMBA, KIX, null, DAY4.atTime(15, 0));
 
         List<DayWindow> windows = calculator.calculate(trip, PreferenceProfile.defaults());
 
@@ -85,7 +85,7 @@ class DayWindowCalculatorTest {
 
     @Test
     void 밤늦게_도착하면_첫날은_일정을_넣을_시간이_없다() {
-        TripContext trip = new TripContext(ZONE, DAY1, DAY4, HOTEL_NAMBA, KIX, DAY1.atTime(22, 30), null);
+        TripContext trip = TripContext.withoutStays(ZONE, DAY1, DAY4, HOTEL_NAMBA, KIX, DAY1.atTime(22, 30), null);
 
         List<DayWindow> windows = calculator.calculate(trip, PreferenceProfile.defaults());
 
@@ -96,7 +96,7 @@ class DayWindowCalculatorTest {
 
     @Test
     void 공항_좌표가_없으면_기본_이동시간을_쓴다() {
-        TripContext trip = new TripContext(ZONE, DAY1, DAY4, HOTEL_NAMBA, null, DAY1.atTime(13, 0), null);
+        TripContext trip = TripContext.withoutStays(ZONE, DAY1, DAY4, HOTEL_NAMBA, null, DAY1.atTime(13, 0), null);
 
         List<DayWindow> windows = calculator.calculate(trip, PreferenceProfile.defaults());
 
@@ -109,7 +109,7 @@ class DayWindowCalculatorTest {
         FakeTravelTimeProvider failing = FakeTravelTimeProvider.fixedMinutes(50)
                 .override(KIX, HOTEL_NAMBA, TravelLookup.error("quota"));
         DayWindowCalculator calc = new DayWindowCalculator(failing, ValidationPolicy.defaults());
-        TripContext trip = new TripContext(ZONE, DAY1, DAY4, HOTEL_NAMBA, KIX, DAY1.atTime(9, 0), null);
+        TripContext trip = TripContext.withoutStays(ZONE, DAY1, DAY4, HOTEL_NAMBA, KIX, DAY1.atTime(9, 0), null);
         int estimated = new TravelEstimator(ValidationPolicy.defaults())
                 .estimateMinutes(TravelEstimator.straightLineMeters(KIX, HOTEL_NAMBA), TravelMode.TRANSIT);
 

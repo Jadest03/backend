@@ -35,6 +35,12 @@ class TravelTimeTest {
     }
 
     @Test
+    void 자동차_직선거리_추정() {
+        // 직선 약 2.8km × 1.3 ÷ 분당 500m → 8분
+        assertEquals(new Leg(8, Mode.DRIVE, true), TravelTime.straightLineDrive(미도스지점, 하루카스));
+    }
+
+    @Test
     void 먼_출발은_같은_요일_같은_시각의_가까운_날로_바꾼다() {
         Instant now = Instant.parse("2026-11-06T00:00:00Z");
         Instant far = Instant.parse("2027-03-16T03:00:00Z");   // 130일 뒤 화요일 12시(KST)
@@ -78,6 +84,13 @@ class TravelTimeTest {
         assertEquals(Mode.TRANSIT, bangkok.mode());
         assertFalse(bangkok.estimated());
 
-        System.out.println("도보: " + near + " / 오사카 추정: " + far + " / 서울: " + seoul + " / 방콕 130일 뒤: " + bangkok);
+        // 렌터카 날 → 자동차 시간 그대로. 위 오사카 추정(자동차 + 10분)에서 10분을 뺀 값과 같다
+        Leg car = service.drive(미도스지점, 하루카스);
+        assertEquals(Mode.DRIVE, car.mode());
+        assertFalse(car.estimated());
+        assertEquals(far.minutes() - 10, car.minutes());
+
+        System.out.println("도보: " + near + " / 오사카 추정: " + far + " / 서울: " + seoul + " / 방콕 130일 뒤: " + bangkok
+                + " / 오사카 자동차: " + car);
     }
 }

@@ -20,7 +20,7 @@ public class TravelTime {
 
     private static final Logger log = LoggerFactory.getLogger(TravelTime.class);
 
-    public enum Mode { WALK, TRANSIT }
+    public enum Mode { WALK, TRANSIT, DRIVE }
 
     /*
     - estimated: true면 실제 경로가 아닌 추정치입니다. 화면에 '추정'으로 표시합니다.
@@ -39,6 +39,7 @@ public class TravelTime {
     private static final int WALK_MAX_MIN = 20;
     private static final int TRANSIT_EXTRA_MIN = 10;  // 자동차 시간 → 대중교통 추정: 역까지 걷기, 기다리기
     private static final int TRANSIT_SCHEDULE_DAYS = 90;  // 이보다 먼 출발은 가까운 날짜로 바꿔 조회
+    private static final int DRIVE_M_PER_MIN = 500;       // 직선거리 추정용 자동차 속도 (시속 30km)
 
     private final String apiKey;
     private final RestClient rest = GoogleClient.create();
@@ -71,6 +72,20 @@ public class TravelTime {
         return straightLine(from, to);
     }
 
+    /*
+    렌터카 쓰는 날: 자동차 시간 그대로 (get()의 대중교통 추정과 달리 +10분 없음).
+    경로 없음·API 오류 → 직선거리로 추정
+    */
+    public Leg drive(LatLng from, LatLng to) {
+        try {
+            Route drive = route(from, to, "DRIVE", null);
+            if (drive != null) return new Leg(minutes(drive), Mode.DRIVE, false);
+        } catch (RestClientException e) {
+            log.warn("Routes API 오류, 직선거리로 추정: {}", e.getMessage());
+        }
+        return straightLineDrive(from, to);
+    }
+
     // 구글은 약 100일 뒤까지만 대중교통 경로를 줌 (2026-11-06 방콕: 101일 뒤 있음, 105일 뒤 없음 → 추정치로 떨어짐).
     // 90일보다 먼 출발은 같은 요일·같은 시각인 7~13일 뒤 날짜로 바꿔 조회. ponytail: 공휴일·시간표 개편은 무시
     static Instant transitDeparture(Instant departure, Instant now) {
@@ -85,6 +100,12 @@ public class TravelTime {
         int walk = (int) Math.ceil(m / 80);
         if (walk <= WALK_MAX_MIN) return new Leg(walk, Mode.WALK, true);
         return new Leg((int) Math.ceil(m / 300) + TRANSIT_EXTRA_MIN, Mode.TRANSIT, true);
+    }
+
+    // ponytail: 굽은 길 1.3배, 자동차 분당 500m(시내 기준). 실제 값과 비교해서 조정.
+    static Leg straightLineDrive(LatLng from, LatLng to) {
+        double m = PlaceMatcher.meters(from.lat(), from.lng(), to.lat(), to.lng()) * 1.3;
+        return new Leg((int) Math.ceil(m / DRIVE_M_PER_MIN), Mode.DRIVE, true);
     }
 
     static int minutes(Route r) {

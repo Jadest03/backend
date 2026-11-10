@@ -64,14 +64,14 @@ public final class DayWindowCalculator {
 
     private LocalDateTime readyAfterArrival(TripContext trip) {
         LocalDateTime leaveAirport = trip.arrivalAt().plusMinutes(policy.arrivalProcessingMinutes());
-        int transfer = transferMinutes(trip, trip.airport(), trip.hotel(), leaveAirport);
+        int transfer = transferMinutes(trip, trip.airport(), trip.endOf(trip.startDate()), leaveAirport);
         return leaveAirport.plusMinutes(transfer + policy.settleMinutes());
     }
 
     private LocalDateTime backAtHotelBeforeDeparture(TripContext trip) {
         LocalDateTime atAirportBy = trip.departureAt().minusMinutes(policy.departureCheckinMinutes());
         LocalDateTime roughDeparture = atAirportBy.minusMinutes(policy.defaultAirportTransferMinutes());
-        int transfer = transferMinutes(trip, trip.hotel(), trip.airport(), roughDeparture);
+        int transfer = transferMinutes(trip, trip.startOf(trip.endDate()), trip.airport(), roughDeparture);
         return atAirportBy.minusMinutes(transfer + policy.luggagePickupMinutes());
     }
 

@@ -100,7 +100,7 @@ public final class ItineraryValidator {
                                  Map<String, PlaceInfo> placeInfos, Issues issues) {
         LocalDate date = day.date();
         LocalDateTime cursor = window.start();
-        GeoPoint previousLocation = trip.hotel();
+        GeoPoint previousLocation = trip.startOf(date);
         List<ScheduledVisit> visits = new ArrayList<>();
 
         for (int i = 0; i < day.visits().size(); i++) {
@@ -134,7 +134,7 @@ public final class ItineraryValidator {
             return new DayTimeline(date, window, visits, null, window.start());
         }
         ScheduledVisit last = visits.get(visits.size() - 1);
-        TravelLeg returnLeg = leg(previousLocation, trip.hotel(), last.end(), trip, preferences, null, date, null);
+        TravelLeg returnLeg = leg(previousLocation, trip.endOf(date), last.end(), trip, preferences, null, date, null);
         LocalDateTime endsAt = last.end().plusMinutes(returnLeg.minutes());
         if (endsAt.isAfter(window.end())) {
             issues.add(IssueCode.DAY_OVERFLOW, date, null, params(

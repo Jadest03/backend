@@ -14,6 +14,11 @@ import com.dotlo.line4thon_18team.itinerary.validation.result.ValidationResult;
 import com.dotlo.line4thon_18team.place.OpeningHours;
 import com.dotlo.line4thon_18team.place.entity.SavedPlace;
 import com.dotlo.line4thon_18team.place.repository.SavedPlaceRepository;
+import com.dotlo.line4thon_18team.reservation.entity.FlightDirection;
+import com.dotlo.line4thon_18team.reservation.entity.TripFlight;
+import com.dotlo.line4thon_18team.reservation.entity.TripStay;
+import com.dotlo.line4thon_18team.reservation.repository.TripFlightRepository;
+import com.dotlo.line4thon_18team.reservation.repository.TripStayRepository;
 import com.dotlo.line4thon_18team.preference.PreferenceService;
 import com.dotlo.line4thon_18team.preference.domain.PreferenceProfile;
 import com.dotlo.line4thon_18team.trip.entity.Trip;
@@ -22,8 +27,12 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.time.ZoneId;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * 일정 검증 (GEN-CHECK-001). 방문 순서만 받아서 시각을 계산하고 영업시간·이동시간 문제를 찾는다.
@@ -39,6 +48,8 @@ public class ItineraryValidationService {
     private final SavedPlaceRepository savedPlaceRepository;
     private final PreferenceService preferenceService;
     private final OpeningHours openingHours;          // BE2 영업시간
+    private final TripStayRepository tripStayRepository;      // BE2 숙소
+    private final TripFlightRepository tripFlightRepository;  // BE2 항공편
     private final TravelTimeProvider travelTimeProvider;
     private final ValidationPolicy validationPolicy;
 
@@ -60,7 +71,7 @@ public class ItineraryValidationService {
         List<SavedPlace> places = savedPlaceRepository.findAllByTripIdOrderByIdAsc(tripId);
         ItineraryValidator validator = new ItineraryValidator(
                 new SavedPlaceInfoProvider(places, openingHours::get), travelTimeProvider, validationPolicy);
-        return new ValidationRun(trip, places, validator, tripContext(trip),
+        return new ValidationRun(trip, places, validator, tripContext(trip, tripId),
                 preferenceService.profileOrDefault(tripId, userId));
     }
 
@@ -83,15 +94,64 @@ public class ItineraryValidationService {
         }
     }
 
-    /*
-     * 숙소·항공편 입력(TRIP-STAY-001)이 아직 없어서, 지금은 도시 중심을 숙소로 두고 계산한다.
-     * 숙소가 생기면 hotel 좌표만 바꾸면 되고, 항공 도착·출발 시각을 넣으면 첫날·마지막 날이 자동으로 줄어든다.
-     */
-    private TripContext tripContext(Trip trip) {
+    /** 숙소를 하나도 입력하지 않았으면 도시 중심을 기준으로 계산한다. */
+    private TripContext tripContext(Trip trip, long tripId) {
         CityController.City city = CityController.findByName(trip.getCity())
                 .orElseThrow(() -> new BusinessException(ErrorCode.UNSUPPORTED_CITY));
         GeoPoint cityCenter = new GeoPoint(city.lat(), city.lng());
+        Map<LocalDate, GeoPoint> nights = nightlyStays(trip, tripStayRepository.findAllByTripIdOrderByCheckInAsc(tripId));
+        Flights flights = flights(tripFlightRepository.findAllByTripId(tripId));
         return new TripContext(ZoneId.of(city.timezone()), trip.getStartDate(), trip.getEndDate(),
-                cityCenter, null, null, null);
+                nights, cityCenter, flights.airport(), flights.arrivalAt(), flights.departureAt());
+    }
+
+    /*
+     * 숙소는 checkIn 날 밤부터 checkOut 전날 밤까지다 (BE2 trip_stays).
+     * 하나라도 넣었으면 첫날부터 마지막 날 전날까지 모든 밤이 채워져 있어야 한다. 한 밤이 비면 그날
+     * 출발·도착 좌표가 없어서 동선을 짤 수 없고, 도시 중심으로 때우면 다른 도시 일정이 통째로 어긋난다.
+     * 하나도 안 넣은 경우는 막지 않는다 (숙소 없이 일정부터 보는 흐름).
+     */
+    static Map<LocalDate, GeoPoint> nightlyStays(Trip trip, List<TripStay> stays) {
+        if (stays.isEmpty()) {
+            return Map.of();
+        }
+        Map<LocalDate, GeoPoint> byNight = new HashMap<>();
+        for (TripStay stay : stays) {
+            GeoPoint place = new GeoPoint(stay.getLatitude(), stay.getLongitude());
+            for (LocalDate night = stay.getCheckIn(); night.isBefore(stay.getCheckOut()); night = night.plusDays(1)) {
+                byNight.put(night, place);
+            }
+        }
+        for (LocalDate night = trip.getStartDate(); night.isBefore(trip.getEndDate()); night = night.plusDays(1)) {
+            if (!byNight.containsKey(night)) {
+                throw new BusinessException(ErrorCode.STAY_REQUIRED);
+            }
+        }
+        return byNight;
+    }
+
+    /*
+     * 공항은 가는 편이 내리는 곳을 쓴다. 가는 편이 없으면 오는 편이 타는 곳을 쓴다.
+     * 간사이로 들어와 이타미에서 나가는 경우처럼 둘이 다를 수 있지만, 검증기는 공항을 하나만 받는다.
+     */
+    private static Flights flights(List<TripFlight> flights) {
+        GeoPoint airport = null;
+        LocalDateTime arrivalAt = null;
+        LocalDateTime departureAt = null;
+        for (TripFlight flight : flights) {
+            if (flight.getDirection() == FlightDirection.OUTBOUND) {
+                airport = new GeoPoint(flight.getArrivalLatitude(), flight.getArrivalLongitude());
+                arrivalAt = flight.getArrivalAt();
+            } else {
+                departureAt = flight.getDepartureAt();
+                if (airport == null) {
+                    airport = new GeoPoint(flight.getDepartureLatitude(), flight.getDepartureLongitude());
+                }
+            }
+        }
+        return new Flights(airport, arrivalAt, departureAt);
+    }
+
+    private record Flights(GeoPoint airport, LocalDateTime arrivalAt, LocalDateTime departureAt) {
     }
 }
