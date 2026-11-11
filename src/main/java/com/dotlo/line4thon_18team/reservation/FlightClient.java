@@ -8,6 +8,7 @@ import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.ParameterizedTypeReference;
@@ -55,10 +56,29 @@ public class FlightClient {
                     Point dep = point(f.departure());
                     Point arr = point(f.arrival());
                     if (dep == null || arr == null) return null;
-                    return new FlightInfo(f.number().replace(" ", ""), f.airline() == null ? null : f.airline().name(), dep, arr);
+                    return new FlightInfo(f.number().replace(" ", ""), airlineName(f.airline()), dep, arr);
                 })
                 .filter(Objects::nonNull)
                 .toList();
+    }
+
+    // AeroDataBox는 항공사 이름을 영어로 줘서(Korean Air) 테스트 노선(한국 ↔ 일본·태국·베트남) 항공사만 한국어로 바꾼다.
+    // 표에 없는 항공사는 영어 이름 그대로
+    private static final Map<String, String> KOREAN_AIRLINE_NAMES = Map.ofEntries(
+            Map.entry("KE", "대한항공"), Map.entry("OZ", "아시아나항공"), Map.entry("7C", "제주항공"),
+            Map.entry("LJ", "진에어"), Map.entry("TW", "티웨이항공"), Map.entry("BX", "에어부산"),
+            Map.entry("RS", "에어서울"), Map.entry("ZE", "이스타항공"), Map.entry("RF", "에어로케이"),
+            Map.entry("YP", "에어프레미아"),
+            Map.entry("JL", "일본항공"), Map.entry("NH", "전일본공수"), Map.entry("MM", "피치항공"),
+            Map.entry("GK", "젯스타 재팬"), Map.entry("ZG", "집에어"),
+            Map.entry("TG", "타이항공"), Map.entry("FD", "타이 에어아시아"), Map.entry("XJ", "타이 에어아시아 엑스"),
+            Map.entry("SL", "타이 라이온에어"), Map.entry("PG", "방콕에어웨이즈"), Map.entry("VZ", "타이 비엣젯"),
+            Map.entry("VN", "베트남항공"), Map.entry("VJ", "비엣젯항공"), Map.entry("QH", "뱀부항공"));
+
+    static String airlineName(Airline airline) {
+        if (airline == null) return null;
+        if (airline.iata() == null) return airline.name();   // Map.of 는 null 키로 찾으면 NPE
+        return KOREAN_AIRLINE_NAMES.getOrDefault(airline.iata(), airline.name());
     }
 
     private static Point point(Movement m) {
@@ -69,7 +89,7 @@ public class FlightClient {
 
     // AeroDataBox 응답 중 쓰는 칸만
     record Flight(String number, Airline airline, Movement departure, Movement arrival) {}
-    record Airline(String name) {}
+    record Airline(String name, String iata) {}
     record Movement(Airport airport, Time scheduledTime) {}
     record Airport(String iata, Location location) {}
     record Location(double lat, double lon) {}
