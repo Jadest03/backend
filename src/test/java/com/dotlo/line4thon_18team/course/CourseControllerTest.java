@@ -4,6 +4,8 @@ import com.dotlo.line4thon_18team.course.entity.Course;
 import com.dotlo.line4thon_18team.course.repository.CourseRepository;
 import com.dotlo.line4thon_18team.course.service.CourseService;
 import com.dotlo.line4thon_18team.place.PlaceCategory;
+import com.dotlo.line4thon_18team.place.PlacePhotos;
+import com.dotlo.line4thon_18team.place.PlacePhotos.Photo;
 import jakarta.persistence.EntityManager;
 import org.hibernate.SessionFactory;
 import org.junit.jupiter.api.BeforeEach;
@@ -13,6 +15,7 @@ import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.transaction.annotation.Transactional;
 import tools.jackson.databind.ObjectMapper;
@@ -23,6 +26,11 @@ import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.nullValue;
+import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
@@ -37,6 +45,7 @@ class CourseControllerTest {
     @Autowired CourseService service;
     @Autowired EntityManager em;
     @Autowired ObjectMapper mapper;
+    @MockitoBean PlacePhotos placePhotos;  // 구글 호출 대역
 
     private Long kyotoId;
     private Long newerKyotoId;
@@ -164,6 +173,28 @@ class CourseControllerTest {
         mvc.perform(get("/api/courses/" + id))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value("INVALID_INPUT"));
+    }
+
+    @Test
+    void 로그인_없이_코스에_들어_있는_장소_사진을_조회한다() throws Exception {
+        when(placePhotos.get("test-second", 0, 1600))
+                .thenReturn(new Photo("https://lh3.googleusercontent.com/a=w1600", 3, List.of()));
+
+        mvc.perform(get("/api/courses/{courseId}/photos/test-second/0", kyotoId).param("maxWidth", "5000"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.photoUrl").value("https://lh3.googleusercontent.com/a=w1600"))
+                .andExpect(jsonPath("$.totalCount").value(3));
+    }
+
+    @Test
+    void 코스에_없는_장소나_없는_코스의_사진은_404이고_구글을_부르지_않는다() throws Exception {
+        mvc.perform(get("/api/courses/{courseId}/photos/test-osaka/0", kyotoId))  // 다른 코스의 장소
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value("PHOTO_NOT_FOUND"));
+        mvc.perform(get("/api/courses/{courseId}/photos/test-first/0", Long.MAX_VALUE))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value("PHOTO_NOT_FOUND"));
+        verify(placePhotos, never()).get(anyString(), anyInt(), anyInt());
     }
 
     @Test

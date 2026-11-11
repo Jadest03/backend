@@ -20,6 +20,6 @@ public class PlacePhotoController {
     @GetMapping("/api/places/{placeId}/photos/{index}")
     public Photo photo(@LoginUser Long userId, @PathVariable String placeId, @PathVariable int index,
                        @RequestParam(defaultValue = "400") int maxWidth) {
-        return placePhotos.get(placeId, index, Math.max(100, Math.min(1600, maxWidth)));
+        return placePhotos.get(placeId, index, PlacePhotos.width(maxWidth));
     }
 }

@@ -36,6 +36,11 @@ public class PlacePhotos {
         this.apiKey = apiKey;
     }
 
+    // 사진 가로 px를 100~1600으로 맞춤. 기본 400
+    public static int width(int requested) {
+        return Math.max(100, Math.min(1600, requested));
+    }
+
     // index번째 사진 (0부터, 구글이 최대 10장만 줌). 사진이 없거나 index가 넘치면 PHOTO_NOT_FOUND
     public Photo get(String placeId, int index, int maxWidth) {
         // 사진 목록(photos)만 받으면 Place Details Essentials IDs Only 요금 = 무료 (2026-11-11 요금표 확인)
@@ -57,12 +62,20 @@ public class PlacePhotos {
         if (index < 0 || index >= photos.size()) throw new BusinessException(ErrorCode.PHOTO_NOT_FOUND);
         GooglePhoto p = photos.get(index);
 
+        if (p.name() == null) throw new BusinessException(ErrorCode.PHOTO_NOT_FOUND);
+
         // 여기서 사진 1장 요금 (Place Details Photos). skipHttpRedirect=true면 이미지 대신 주소를 JSON으로 줌
         // name이 "places/{id}/photos/{ref}"라 {변수}로 넣으면 /가 인코딩돼서 그대로 붙임
-        Media m = rest.get().uri(API_BASE + p.name() + "/media?maxWidthPx={w}&skipHttpRedirect=true", maxWidth)
-                .header("X-Goog-Api-Key", apiKey)
-                .retrieve()
-                .body(Media.class);
+        Media m;
+        try {
+            m = rest.get().uri(API_BASE + p.name() + "/media?maxWidthPx={w}&skipHttpRedirect=true", maxWidth)
+                    .header("X-Goog-Api-Key", apiKey)
+                    .retrieve()
+                    .body(Media.class);
+        } catch (HttpClientErrorException.BadRequest | HttpClientErrorException.NotFound e) {
+            // 사진 이름이 만료됐거나 잘못되면 400 "The photo resource in the request is invalid." (2026-11-11 확인)
+            throw new BusinessException(ErrorCode.PHOTO_NOT_FOUND);
+        }
         if (m == null || m.photoUri() == null) throw new BusinessException(ErrorCode.PHOTO_NOT_FOUND);
 
         List<Attribution> by = p.authorAttributions() == null ? List.of()
