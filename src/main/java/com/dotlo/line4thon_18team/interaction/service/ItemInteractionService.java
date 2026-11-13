@@ -159,16 +159,21 @@ public class ItemInteractionService {
         return trip;
     }
 
-    // 댓글이 없거나, 그 여행 구성원이 아니면 COMMENT_NOT_FOUND (남의 여행 댓글이 있는지 드러내지 않는다)
+    /**
+     * 댓글이 없거나, 그 여행 구성원이 아니면 COMMENT_NOT_FOUND (남의 여행 댓글이 있는지 드러내지 않는다).
+     * 여행을 잠근 뒤에 댓글을 읽는다. 먼저 읽어 두면 잠금을 기다리는 사이 다른 요청이 지운 댓글로
+     * 좋아요를 저장하다 외래키 오류(500)가 난다.
+     */
     private ItemComment findMemberComment(Long userId, Long commentId) {
-        ItemComment comment = comments.findById(commentId)
+        Long tripId = comments.findTripIdById(commentId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.COMMENT_NOT_FOUND));
-        Trip trip = tripRepository.findByIdForUpdate(comment.getTrip().getId())
+        Trip trip = tripRepository.findByIdForUpdate(tripId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.COMMENT_NOT_FOUND));
         if (!tripService.isMember(trip, userId)) {
             throw new BusinessException(ErrorCode.COMMENT_NOT_FOUND);
         }
-        return comment;
+        return comments.findById(commentId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.COMMENT_NOT_FOUND));
     }
 
     private void requireActiveItem(Long tripId, String itemId) {
