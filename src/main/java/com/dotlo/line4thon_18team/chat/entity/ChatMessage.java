@@ -13,7 +13,7 @@ import lombok.NoArgsConstructor;
  * 순서와 "새 메시지만 가져오기"는 id 로 한다.
  */
 @Entity
-@Table(name = "trip_chat_message")
+@Table(name = "trip_chat_message", indexes = @Index(name = "idx_trip_chat_message_trip_id", columnList = "trip_id,id"))
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class ChatMessage extends BaseTimeEntity {
