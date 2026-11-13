@@ -12,7 +12,7 @@ import org.springframework.web.bind.annotation.*;
 
 @RestController
 @RequiredArgsConstructor
-@RequestMapping("/api/trips/{tripId}/messages")
+@RequestMapping("/api/trips/{tripId}/chat/messages")
 public class ChatMessageController {
 
     private final ChatMessageService chatMessageService;
@@ -24,7 +24,7 @@ public class ChatMessageController {
         return ResponseEntity.ok(chatMessageService.send(userId, tripId, request.text()));
     }
 
-    // 메시지 목록. after 없으면 최근 50개, 있으면 그 id 다음 것만 (폴링)
+    // 메시지 목록 (폴링). after 다음 것을 최대 100개, after 없으면 처음부터
     @GetMapping
     public ResponseEntity<ChatMessageListResponse> list(@LoginUser Long userId, @PathVariable Long tripId,
                                                         @RequestParam(required = false) Long after) {

@@ -13,7 +13,7 @@ import lombok.NoArgsConstructor;
  * 순서와 "새 메시지만 가져오기"는 id 로 한다.
  */
 @Entity
-@Table(name = "chat_messages")
+@Table(name = "trip_chat_message")
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class ChatMessage extends BaseTimeEntity {
@@ -26,21 +26,21 @@ public class ChatMessage extends BaseTimeEntity {
     @JoinColumn(name = "trip_id", nullable = false)
     private Trip trip;
 
-    // 보낸 사람. 도틀로(AI) 메시지는 null
+    // 보낸 사람. SYSTEM, AI 메시지는 null
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "sender_id")
+    @JoinColumn(name = "user_id")
     private User sender;
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, columnDefinition = "varchar(20)")   // MySQL enum 이면 종류를 더할 때 ddl update 가 안 바꿔 줘서 문자열로 둔다
     private ChatMessageType type;
 
-    // 말풍선 글. 투표 카드처럼 글 없이 payload 만 있을 수 있다
-    @Column(length = 500)
+    // 말풍선 글. 사람이 보내는 글은 500자까지 (ChatMessageSendRequest)
+    @Column(columnDefinition = "TEXT")
     private String text;
 
-    // 종류별 추가 데이터(JSON). AI 는 카드·버튼, POLL 은 pollId
-    @Column(columnDefinition = "json")
+    // 도틀로 카드·선택지(JSON). 서버는 열어보지 않고 받은 글자 그대로 저장해서 돌려준다
+    @Column(columnDefinition = "LONGTEXT")
     private String payload;
 
     public static ChatMessage create(Trip trip, User sender, ChatMessageType type, String text, String payload) {

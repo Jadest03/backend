@@ -1,6 +1,6 @@
 package com.dotlo.line4thon_18team.chat;
 
-import com.dotlo.line4thon_18team.chat.entity.ChatMessageType;
+import com.dotlo.line4thon_18team.chat.entity.ChatMessage;
 import com.dotlo.line4thon_18team.chat.repository.ChatMessageRepository;
 import com.dotlo.line4thon_18team.member.entity.TripMember;
 import com.dotlo.line4thon_18team.member.repository.TripMemberRepository;
@@ -23,7 +23,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
-import java.util.Map;
+import java.util.List;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -34,7 +34,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-/** 여행 채팅방 메시지 보내기·가져오기(폴링). MySQL이 필요하다. */
+/** 여행 채팅방 메시지 보내기·가져오기(폴링), 서버가 넣는 SYSTEM·AI 메시지. MySQL이 필요하다. */
 @SpringBootTest
 @AutoConfigureMockMvc
 @TestPropertySource(properties = "auth.dev-header-enabled=true")
@@ -42,6 +42,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 class ChatMessageApiTest {
 
     private static final LocalDate START = LocalDate.of(2026, 12, 10);
+    private static final String URL = "/api/trips/{tripId}/chat/messages";
 
     @Autowired MockMvc mvc;
     @Autowired UserRepository users;
@@ -66,63 +67,78 @@ class ChatMessageApiTest {
 
     @Test
     void 구성원이_보낸_메시지를_순서대로_가져오고_after_로_새_것만_받는다() throws Exception {
-        long firstId = id(send(owner.getId(), "오사카성 갈까요?")
+        send(owner.getId(), "오사카성 갈까요?")
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.type").value("TEXT"))
+                .andExpect(jsonPath("$.type").value("USER"))
                 .andExpect(jsonPath("$.sender.nickname").value(owner.getNickname()))
-                .andExpect(jsonPath("$.sender.characterId").value(3)));
+                .andExpect(jsonPath("$.sender.characterId").value(3));
         send(member.getId(), "좋아요!").andExpect(status().isOk());
 
-        perform(get("/api/trips/{tripId}/messages", trip.getId()), member.getId())
+        perform(get(URL, trip.getId()), member.getId())
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.messages.length()").value(2))
                 .andExpect(jsonPath("$.messages[0].text").value("오사카성 갈까요?"))
                 .andExpect(jsonPath("$.messages[1].sender.id").value(member.getId()))
                 .andExpect(jsonPath("$.messages[1].payload").value(nullValue()));
 
-        perform(get("/api/trips/{tripId}/messages", trip.getId()).param("after", String.valueOf(firstId)), owner.getId())
+        Long firstId = allMessages().get(0).getId();
+        perform(get(URL, trip.getId()).param("after", firstId.toString()), owner.getId())
                 .andExpect(jsonPath("$.messages.length()").value(1))
                 .andExpect(jsonPath("$.messages[0].text").value("좋아요!"));
     }
 
     @Test
-    void 처음_가져올_때는_최근_50개만_오래된_것부터() throws Exception {
-        for (int i = 1; i <= 55; i++) {
-            chatMessageService.post(trip.getId(), owner.getId(), ChatMessageType.TEXT, "m" + i, null);
+    void 처음에는_처음부터_한_번에_100개씩_가져온다() throws Exception {
+        for (int i = 1; i <= 105; i++) {
+            chatMessageService.appendSystem(trip.getId(), "m" + i);
         }
-        perform(get("/api/trips/{tripId}/messages", trip.getId()), owner.getId())
-                .andExpect(jsonPath("$.messages.length()").value(50))
-                .andExpect(jsonPath("$.messages[0].text").value("m6"))
-                .andExpect(jsonPath("$.messages[49].text").value("m55"));
+        perform(get(URL, trip.getId()), owner.getId())
+                .andExpect(jsonPath("$.messages.length()").value(100))
+                .andExpect(jsonPath("$.messages[0].text").value("m1"))
+                .andExpect(jsonPath("$.messages[99].text").value("m100"));
+
+        Long hundredthId = allMessages().get(99).getId();
+        perform(get(URL, trip.getId()).param("after", hundredthId.toString()), owner.getId())
+                .andExpect(jsonPath("$.messages.length()").value(5))
+                .andExpect(jsonPath("$.messages[0].text").value("m101"));
     }
 
     @Test
-    void 서버가_올린_AI_답변과_투표_카드는_payload_를_JSON_그대로_내려준다() throws Exception {
-        chatMessageService.post(trip.getId(), null, ChatMessageType.AI, "의견을 정리했어요",
-                Map.of("card", Map.of("kind", "OPINION_SUMMARY")));
-        chatMessageService.post(trip.getId(), member.getId(), ChatMessageType.POLL, null, Map.of("pollId", 7));
+    void 시스템_알림과_도틀로_응답은_보낸_사람_없이_payload_를_받은_그대로_내려준다() throws Exception {
+        chatMessageService.appendSystem(trip.getId(), "정다은님이 여행에 참여했어요");
+        chatMessageService.appendAi(trip.getId(), "부담 없는 곳으로 골랐어요.", "{\"card\":{\"kind\":\"POLL\",\"pollId\":7}}");
 
-        perform(get("/api/trips/{tripId}/messages", trip.getId()), owner.getId())
-                .andExpect(jsonPath("$.messages[0].type").value("AI"))
+        perform(get(URL, trip.getId()), owner.getId())
+                .andExpect(jsonPath("$.messages[0].type").value("SYSTEM"))
                 .andExpect(jsonPath("$.messages[0].sender").value(nullValue()))
-                .andExpect(jsonPath("$.messages[0].payload.card.kind").value("OPINION_SUMMARY"))
-                .andExpect(jsonPath("$.messages[1].type").value("POLL"))
-                .andExpect(jsonPath("$.messages[1].sender.id").value(member.getId()))
-                .andExpect(jsonPath("$.messages[1].payload.pollId").value(7));
+                .andExpect(jsonPath("$.messages[0].payload").value(nullValue()))
+                .andExpect(jsonPath("$.messages[1].type").value("AI"))
+                .andExpect(jsonPath("$.messages[1].sender").value(nullValue()))
+                .andExpect(jsonPath("$.messages[1].payload.card.kind").value("POLL"))
+                .andExpect(jsonPath("$.messages[1].payload.card.pollId").value(7));
+    }
+
+    @Test
+    void 전송_API_는_type_을_보내도_사람_메시지로_저장한다() throws Exception {
+        perform(post(URL, trip.getId()).contentType(MediaType.APPLICATION_JSON)
+                .content("{\"text\":\"도틀로인 척\",\"type\":\"AI\"}"), member.getId())
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.type").value("USER"))
+                .andExpect(jsonPath("$.sender.id").value(member.getId()));
     }
 
     @Test
     void 빈_글이나_500자를_넘는_글은_400() throws Exception {
         send(owner.getId(), " ").andExpect(status().isBadRequest());
         send(owner.getId(), "가".repeat(501)).andExpect(status().isBadRequest());
-        assertThat(messages.findTop50ByTripIdOrderByIdDesc(trip.getId())).isEmpty();
+        assertThat(allMessages()).isEmpty();
     }
 
     @Test
     void 구성원이_아니면_404() throws Exception {
         send(strangerId, "안녕").andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.code").value("TRIP_NOT_FOUND"));
-        perform(get("/api/trips/{tripId}/messages", trip.getId()), strangerId)
+        perform(get(URL, trip.getId()), strangerId)
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.code").value("TRIP_NOT_FOUND"));
     }
@@ -131,22 +147,20 @@ class ChatMessageApiTest {
     void 여행을_지우면_메시지도_지워진다() throws Exception {
         send(owner.getId(), "안녕").andExpect(status().isOk());
         perform(delete("/api/trips/{tripId}", trip.getId()), owner.getId()).andExpect(status().isNoContent());
-        assertThat(messages.findTop50ByTripIdOrderByIdDesc(trip.getId())).isEmpty();
+        assertThat(allMessages()).isEmpty();
+    }
+
+    private List<ChatMessage> allMessages() {
+        return messages.findTop100ByTripIdAndIdGreaterThanOrderByIdAsc(trip.getId(), 0L);
     }
 
     private ResultActions send(Long userId, String text) throws Exception {
-        String body = "{\"text\":\"" + text + "\"}";
-        return perform(post("/api/trips/{tripId}/messages", trip.getId())
-                .contentType(MediaType.APPLICATION_JSON).content(body), userId);
+        return perform(post(URL, trip.getId()).contentType(MediaType.APPLICATION_JSON)
+                .content("{\"text\":\"" + text + "\"}"), userId);
     }
 
     private ResultActions perform(MockHttpServletRequestBuilder request, Long userId) throws Exception {
         return mvc.perform(request.header("X-User-Id", userId));
-    }
-
-    private static long id(ResultActions result) throws Exception {
-        String json = result.andReturn().getResponse().getContentAsString();
-        return Long.parseLong(json.replaceAll("^\\{\"id\":(\\d+).*", "$1"));
     }
 
     private static User newUser(int characterId) {

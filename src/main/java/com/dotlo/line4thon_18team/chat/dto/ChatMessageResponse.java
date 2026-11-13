@@ -8,8 +8,9 @@ import com.fasterxml.jackson.annotation.JsonRawValue;
 import java.time.LocalDateTime;
 
 /**
- * @param sender  보낸 사람. AI 메시지는 null
- * @param payload 종류별 추가 데이터(JSON 그대로). 없으면 null
+ * @param sender  보낸 사람. SYSTEM, AI 메시지는 null.
+ *                나간 사람·탈퇴한 사람 메시지도 남아서, 멤버 목록 없이 이름과 캐릭터를 띄울 수 있게 같이 내려준다
+ * @param payload 도틀로 카드·선택지(JSON 그대로). 없으면 null
  */
 public record ChatMessageResponse(
         Long id,

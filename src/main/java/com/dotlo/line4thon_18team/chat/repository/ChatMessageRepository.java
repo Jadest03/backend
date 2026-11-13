@@ -8,11 +8,7 @@ import java.util.List;
 
 public interface ChatMessageRepository extends JpaRepository<ChatMessage, Long> {
 
-    // 처음 들어왔을 때: 최근 50개 (최신순으로 가져와서 서비스에서 뒤집는다)
-    @EntityGraph(attributePaths = "sender")
-    List<ChatMessage> findTop50ByTripIdOrderByIdDesc(Long tripId);
-
-    // 폴링: 마지막으로 받은 id 다음부터
+    // 폴링: 마지막으로 받은 id 다음부터 오래된 것 순으로 100개 (처음 들어오면 afterId=0)
     @EntityGraph(attributePaths = "sender")
     List<ChatMessage> findTop100ByTripIdAndIdGreaterThanOrderByIdAsc(Long tripId, Long afterId);
 
