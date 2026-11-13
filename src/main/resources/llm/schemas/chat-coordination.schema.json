@@ -1,0 +1,38 @@
+{
+  "type": "object",
+  "description": "채팅 대화에서 뽑은 참여자별 의견과 조율 방향",
+  "additionalProperties": false,
+  "required": ["summaries", "directions", "text"],
+  "properties": {
+    "summaries": {
+      "type": "array",
+      "description": "말한 참여자마다 한 줄. 말한 적 없는 참여자는 넣지 않는다",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["memberNumber", "point"],
+        "properties": {
+          "memberNumber": {
+            "type": "integer",
+            "description": "참여자 번호. 대화에 나온 번호만 쓴다"
+          },
+          "point": {
+            "type": "string",
+            "description": "그 사람이 원하는 것을 한 문장으로. 그 사람 입장에서 쓴다"
+          }
+        }
+      }
+    },
+    "directions": {
+      "type": "array",
+      "description": "서로 다른 조율 방향 2~3개. 사용자가 버튼으로 고를 문구라 짧게 쓴다",
+      "items": {
+        "type": "string"
+      }
+    },
+    "text": {
+      "type": "string",
+      "description": "정리한 내용을 소개하는 한 문장. 존댓말. 참여자 번호를 쓰지 않는다. 위 내용을 정한 뒤에 쓴다"
+    }
+  }
+}
