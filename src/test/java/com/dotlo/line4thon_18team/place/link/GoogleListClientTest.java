@@ -53,12 +53,12 @@ class GoogleListClientTest {
     }
 
     @Test
-    void 비공개_리스트면_LIST_NOT_ACCESSIBLE() {
+    void 비공개_리스트면_LIST_PRIVATE() {
         String privateList = ")]}'\n[null,null,[5,\"abc\"]]";
 
         assertThatThrownBy(() -> client.parse(privateList))
                 .isInstanceOf(BusinessException.class)
-                .extracting("errorCode").isEqualTo(ErrorCode.LIST_NOT_ACCESSIBLE);
+                .extracting("errorCode").isEqualTo(ErrorCode.LIST_PRIVATE);
     }
 
     // 구글맵 링크가 아니면 구글에 요청하기 전에 막는다 (서버가 아무 주소로나 요청을 보내지 않게)

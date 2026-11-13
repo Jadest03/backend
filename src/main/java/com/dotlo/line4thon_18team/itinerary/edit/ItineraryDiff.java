@@ -3,6 +3,7 @@ package com.dotlo.line4thon_18team.itinerary.edit;
 import com.dotlo.line4thon_18team.itinerary.validation.model.DayDraft;
 import com.dotlo.line4thon_18team.itinerary.validation.model.ItineraryDraft;
 import com.dotlo.line4thon_18team.itinerary.validation.model.VisitDraft;
+import com.fasterxml.jackson.annotation.JsonIgnore;
 
 import java.time.LocalDate;
 import java.time.LocalTime;
@@ -57,6 +58,8 @@ public record ItineraryDiff(List<ItemChange> changes, Set<LocalDate> reorderedDa
                              LocalTime fromFixedStart, LocalTime toFixedStart) {
     }
 
+    /** 서버 안에서 쓰는 편의 메서드. 응답에는 changes 와 reorderedDays 만 내보낸다. */
+    @JsonIgnore
     public boolean isEmpty() {
         return changes.isEmpty() && reorderedDays.isEmpty();
     }

@@ -8,4 +8,6 @@ import java.util.Optional;
 public interface UserRepository extends JpaRepository<User, Long> {
     // 가입한 적이 있는지 확인
     Optional<User> findByGoogleSub(String googleSub);
+
+    Optional<User> findByNickname(String nickname);
 }

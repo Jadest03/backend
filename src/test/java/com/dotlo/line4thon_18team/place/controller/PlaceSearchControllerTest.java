@@ -38,7 +38,7 @@ class PlaceSearchControllerTest {
     void 여행_도시_중심_50km에서_검색() throws Exception {
         Trip trip = mock(Trip.class);
         when(trip.getCity()).thenReturn("오사카");
-        when(tripService.findOwnedTrip(1L, 7L)).thenReturn(trip);
+        when(tripService.findMemberTrip(1L, 7L)).thenReturn(trip);
         when(placeMatcher.searchNear("이치란", 34.6952474, 135.5012079, 50_000)).thenReturn(List.of(
                 new Candidate("ChIJt9Y375HmAGARejKVNQwlkbI", "이치란 우메다시바타점", "오사카 기타구", 34.7, 135.5)));
 

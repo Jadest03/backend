@@ -2,6 +2,7 @@ package com.dotlo.line4thon_18team.itinerary.ai;
 
 import com.dotlo.line4thon_18team.place.PlaceCategory;
 import com.dotlo.line4thon_18team.preference.domain.PreferenceProfile;
+import com.dotlo.line4thon_18team.trip.entity.Companion;
 
 import java.util.List;
 import java.util.Objects;
@@ -13,10 +14,11 @@ import java.util.Objects;
  * 번호로 받으면 입력에 없는 장소를 만들어 내는 것도 바로 걸러낼 수 있다.
  *
  * @param dayCount         여행 일수 (1일차 ~ dayCount일차)
+ * @param companion        누구와 떠나는지. 여행 만들 때 고른 값을 배치에 참고한다 (취향 칩과는 별개)
  * @param previousProblems 지난번 배치에서 검증에 걸린 내용. 다시 배치할 때 프롬프트에 붙인다.
  */
-public record PlanGenerationInput(String city, int dayCount, PreferenceProfile preferences, List<Candidate> places,
-                                  List<String> previousProblems) {
+public record PlanGenerationInput(String city, int dayCount, Companion companion, PreferenceProfile preferences,
+                                  List<Candidate> places, List<String> previousProblems) {
 
     /**
      * @param number   1부터 시작하는 장소 번호. 모델은 이 번호로만 답한다.
@@ -42,19 +44,19 @@ public record PlanGenerationInput(String city, int dayCount, PreferenceProfile p
     }
 
     /** 장소 목록에 번호를 붙여 만든다. */
-    public static PlanGenerationInput of(String city, int dayCount, PreferenceProfile preferences,
-                                         List<PlaceRef> places) {
+    public static PlanGenerationInput of(String city, int dayCount, Companion companion,
+                                         PreferenceProfile preferences, List<PlaceRef> places) {
         List<Candidate> candidates = new java.util.ArrayList<>();
         for (int i = 0; i < places.size(); i++) {
             PlaceRef place = places.get(i);
             candidates.add(new Candidate(i + 1, place.placeId(), place.name(), place.category()));
         }
-        return new PlanGenerationInput(city, dayCount, preferences, candidates, List.of());
+        return new PlanGenerationInput(city, dayCount, companion, preferences, candidates, List.of());
     }
 
     /** 검증에 걸린 내용을 붙여 다시 배치하게 한다. */
     public PlanGenerationInput retryWith(List<String> problems) {
-        return new PlanGenerationInput(city, dayCount, preferences, places, problems);
+        return new PlanGenerationInput(city, dayCount, companion, preferences, places, problems);
     }
 
     /** 번호를 붙이기 전의 장소. category가 비어 있으면 OTHER로 본다. */

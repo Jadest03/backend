@@ -12,6 +12,9 @@ import com.dotlo.line4thon_18team.itinerary.validation.model.PlaceInfo;
 import com.dotlo.line4thon_18team.itinerary.validation.support.FakePlaceInfoProvider;
 import com.dotlo.line4thon_18team.itinerary.validation.support.FakeTravelTimeProvider;
 import com.dotlo.line4thon_18team.itinerary.validation.support.OsakaFixtures;
+import com.dotlo.line4thon_18team.itinerary.version.dto.ItineraryVersionView;
+import com.dotlo.line4thon_18team.itinerary.version.entity.ItinerarySource;
+import com.dotlo.line4thon_18team.itinerary.version.service.ItineraryService;
 import com.dotlo.line4thon_18team.place.entity.PlaceMatchStatus;
 import com.dotlo.line4thon_18team.place.entity.SavedPlace;
 import com.dotlo.line4thon_18team.preference.domain.PreferenceProfile;
@@ -21,6 +24,7 @@ import com.dotlo.line4thon_18team.user.entity.User;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
 
+import java.time.LocalDateTime;
 import java.util.List;
 
 import static com.dotlo.line4thon_18team.itinerary.validation.support.OsakaFixtures.DOTONBORI;
@@ -37,10 +41,12 @@ class ItineraryGenerationServiceTest {
 
     private final FakeLlmClient llm = new FakeLlmClient();
     private final ItineraryValidationService validationService = Mockito.mock(ItineraryValidationService.class);
+    private final ItineraryService itineraryService = Mockito.mock(ItineraryService.class);
     private final ItineraryGenerationService service = new ItineraryGenerationService(
             validationService,
             new StructuredLlmExecutor(llm, 3, 0, millis -> { }),
-            new PlanGenerationTask(new SchemaLoader()));
+            new PlanGenerationTask(new SchemaLoader()),
+            itineraryService);
 
     @Test
     void 장소를_일차별로_나누고_시각을_계산한다() {
@@ -156,7 +162,62 @@ class ItineraryGenerationServiceTest {
         assertThat(llm.callCount()).isZero();
     }
 
+    @Test
+    void 만든_일정을_AI_생성으로_저장한다() {
+        given(matched(DOTONBORI), matched(KUROMON));
+        llm.thenReturn("""
+                {"days": [{"dayNumber": 1, "placeNumbers": [1]},
+                          {"dayNumber": 2, "placeNumbers": [2]},
+                          {"dayNumber": 3, "placeNumbers": []},
+                          {"dayNumber": 4, "placeNumbers": []}],
+                 "excluded": []}
+                """);
+        Mockito.when(itineraryService.save(Mockito.anyLong(), Mockito.anyLong(), Mockito.any(),
+                        Mockito.any(), Mockito.any(), Mockito.any()))
+                .thenAnswer(call -> savedVersion(call.getArgument(4)));
+
+        GeneratedItineraryVersion result = service.generateAndSave(1L, 7L);
+
+        // 첫 생성이라 baseVersion 은 없다. 수정 반영과 달리 덮어쓸 기존 일정이 없기 때문
+        Mockito.verify(itineraryService).save(Mockito.eq(1L), Mockito.eq(7L),
+                Mockito.eq(ItinerarySource.AI_GENERATED), Mockito.isNull(), Mockito.any(), Mockito.any());
+        assertThat(result.itinerary().version()).isEqualTo(1);
+        assertThat(result.itinerary().draft().days()).hasSize(4);
+    }
+
+    @Test
+    void 넣지_못한_장소는_저장_결과와_함께_돌려준다() {
+        given(matched(DOTONBORI), matched(KUROMON), matched(UMEDA_SKY));
+        llm.thenReturn("""
+                {"days": [{"dayNumber": 1, "placeNumbers": [1]},
+                          {"dayNumber": 2, "placeNumbers": [2]},
+                          {"dayNumber": 3, "placeNumbers": []},
+                          {"dayNumber": 4, "placeNumbers": []}],
+                 "excluded": [3]}
+                """);
+        Mockito.when(itineraryService.save(Mockito.anyLong(), Mockito.anyLong(), Mockito.any(),
+                        Mockito.any(), Mockito.any(), Mockito.any()))
+                .thenAnswer(call -> savedVersion(call.getArgument(4)));
+
+        GeneratedItineraryVersion result = service.generateAndSave(1L, 7L);
+
+        assertThat(result.excludedPlaceIds()).containsExactly(UMEDA_SKY.placeId());
+    }
+
+    @Test
+    void 생성에_실패하면_저장하지_않는다() {
+        given(pending(DOTONBORI));
+
+        assertThatThrownBy(() -> service.generateAndSave(1L, 7L)).isInstanceOf(BusinessException.class);
+        Mockito.verifyNoInteractions(itineraryService);
+    }
+
     // ---- helpers ----
+
+    private static ItineraryVersionView savedVersion(Object draft) {
+        return new ItineraryVersionView(1, ItinerarySource.AI_GENERATED, null, 7L, LocalDateTime.now(),
+                (com.dotlo.line4thon_18team.itinerary.validation.model.ItineraryDraft) draft, "{}");
+    }
 
     private void given(SavedPlace... places) {
         FakePlaceInfoProvider provider = OsakaFixtures.places();

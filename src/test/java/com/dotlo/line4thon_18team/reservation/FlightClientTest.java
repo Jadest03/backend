@@ -2,6 +2,7 @@ package com.dotlo.line4thon_18team.reservation;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.dotlo.line4thon_18team.reservation.FlightClient.Airline;
 import com.dotlo.line4thon_18team.reservation.FlightClient.Airport;
 import com.dotlo.line4thon_18team.reservation.FlightClient.Flight;
 import com.dotlo.line4thon_18team.reservation.FlightClient.Location;
@@ -34,7 +35,7 @@ class FlightClientTest {
         assertThat(flights).hasSize(1);
         FlightInfo f = flights.get(0);
         assertThat(f.number()).isEqualTo("KE723");   // 응답은 "KE 723"
-        assertThat(f.airline()).isEqualTo("Korean Air");
+        assertThat(f.airline()).isEqualTo("대한항공");   // 응답은 Korean Air, iata KE
         assertThat(f.departure().airport()).isEqualTo("ICN");
         assertThat(f.departure().time()).isEqualTo(LocalDateTime.of(2026, 11, 15, 8, 50));   // 인천 현지
         assertThat(f.arrival().airport()).isEqualTo("KIX");
@@ -54,6 +55,14 @@ class FlightClientTest {
                 new Flight("KE 723", null, full, noTime),
                 new Flight("KE 723", null, full, null)))).isEmpty();
         assertThat(FlightClient.toInfos(null)).isEmpty();   // 못 찾으면 204 (본문 없음)
+    }
+
+    @Test
+    void 표에_있는_항공사는_한국어_없으면_영어_이름_그대로() {
+        assertThat(FlightClient.airlineName(new Airline("Peach", "MM"))).isEqualTo("피치항공");
+        assertThat(FlightClient.airlineName(new Airline("Cathay Pacific", "CX"))).isEqualTo("Cathay Pacific");
+        assertThat(FlightClient.airlineName(new Airline("Korean Air", null))).isEqualTo("Korean Air");
+        assertThat(FlightClient.airlineName(null)).isNull();
     }
 
     // 실제 API 호출. 키가 환경변수에 있을 때만 (CI에서는 건너뜀). 2유닛 사용

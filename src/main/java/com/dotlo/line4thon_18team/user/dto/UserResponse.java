@@ -9,6 +9,10 @@ public record UserResponse(
         String email,
         String name,
         String profileImageUrl,
+        String nickname,
+        String bio,
+        Integer characterId,
+        boolean signupCompleted,
         LocalDateTime createdAt
 ) {
 
@@ -18,6 +22,10 @@ public record UserResponse(
                 user.getEmail(),
                 user.getName(),
                 user.getProfileImageUrl(),
+                user.getNickname(),
+                user.getBio(),
+                user.getCharacterId(),
+                user.isSignupCompleted(),
                 user.getCreatedAt()
         );
     }

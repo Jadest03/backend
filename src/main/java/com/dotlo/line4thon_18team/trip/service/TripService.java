@@ -3,6 +3,8 @@ package com.dotlo.line4thon_18team.trip.service;
 import com.dotlo.line4thon_18team.city.CityController;
 import com.dotlo.line4thon_18team.global.error.BusinessException;
 import com.dotlo.line4thon_18team.global.error.ErrorCode;
+import com.dotlo.line4thon_18team.member.entity.TripMember;
+import com.dotlo.line4thon_18team.member.repository.TripMemberRepository;
 import com.dotlo.line4thon_18team.trip.dto.TripCreateRequest;
 import com.dotlo.line4thon_18team.trip.dto.TripResponse;
 import com.dotlo.line4thon_18team.trip.dto.TripUpdateRequest;
@@ -15,8 +17,10 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
+import java.util.stream.Stream;
 
 @Service
 @RequiredArgsConstructor
@@ -25,6 +29,7 @@ public class TripService {
 
     private final TripRepository tripRepository;
     private final UserRepository userRepository;
+    private final TripMemberRepository tripMemberRepository;
 
     @Transactional
     public TripResponse createTrip(Long userId, TripCreateRequest request) {
@@ -37,8 +42,11 @@ public class TripService {
         return TripResponse.from(tripRepository.save(trip));
     }
 
+    // 내가 만든 여행 + 초대로 참여한 여행 (최신순)
     public List<TripResponse> getMyTrips(Long userId) {
-        return tripRepository.findAllByUserIdOrderByCreatedAtDesc(userId).stream()
+        Stream<Trip> joined = tripMemberRepository.findAllByUserId(userId).stream().map(TripMember::getTrip);
+        return Stream.concat(tripRepository.findAllByUserIdOrderByCreatedAtDesc(userId).stream(), joined)
+                .sorted(Comparator.comparing(Trip::getCreatedAt).reversed())
                 .map(TripResponse::from)
                 .toList();
     }
@@ -50,12 +58,12 @@ public class TripService {
     }
 
     public TripResponse getTrip(Long userId, Long tripId) {
-        return TripResponse.from(findOwnedTrip(userId, tripId));
+        return TripResponse.from(findMemberTrip(userId, tripId));
     }
 
     @Transactional
     public TripResponse updateTrip(Long userId, Long tripId, TripUpdateRequest request) {
-        Trip trip = findOwnedTrip(userId, tripId);
+        Trip trip = findMemberTrip(userId, tripId);
         if (request.city() != null) {
             validateSupportedCity(request.city());
         }
@@ -66,11 +74,28 @@ public class TripService {
 
     /**
      * 내 여행을 찾고, 없거나 남의 여행이면 404 를 던진다.
-     * 장소·취향·일정 등 여행에 붙는 기능에서도 "이 사용자의 여행인지" 확인할 때 이 메서드를 쓴다.
+     * 방장만 되는 기능에서 쓴다. 여행에 붙는 기능은 구성원 모두 같은 권한이라 findMemberTrip 을 쓴다.
      */
     public Trip findOwnedTrip(Long userId, Long tripId) {
         return tripRepository.findByIdAndUserId(tripId, userId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.TRIP_NOT_FOUND));
+    }
+
+    /**
+     * 방장이거나 초대로 참여한 구성원이면 여행을 돌려주고, 아니면 404 를 던진다.
+     * 여행에 붙는 기능(여행, 장소, 일정, 예약, 취향, 확정, 공유, 초대)에서 쓴다. 기획: 구성원 모두 같은 편집 권한
+     */
+    public Trip findMemberTrip(Long userId, Long tripId) {
+        Trip trip = tripRepository.findById(tripId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.TRIP_NOT_FOUND));
+        if (!isMember(trip, userId)) {
+            throw new BusinessException(ErrorCode.TRIP_NOT_FOUND);
+        }
+        return trip;
+    }
+
+    public boolean isMember(Trip trip, Long userId) {
+        return trip.getUser().getId().equals(userId) || tripMemberRepository.existsByTripIdAndUserId(trip.getId(), userId);
     }
 
     // 지원 도시 목록(GET /api/cities)에 있는 도시만 허용

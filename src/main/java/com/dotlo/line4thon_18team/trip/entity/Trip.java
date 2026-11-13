@@ -69,9 +69,18 @@ public class Trip extends BaseTimeEntity {
                 startDate != null ? startDate : this.startDate,
                 endDate != null ? endDate : this.endDate,
                 companion != null ? companion : this.companion,
-                // 동행 종류만 바꾸면 이전 인원은 의미가 없어서 새로 받는다
+                // 동행 종류만 바꾸면 이전 인원은 의미가 없어서 새로 정한다
                 companionCount != null ? companionCount : (companion == null ? this.companionCount : null)
         );
+    }
+
+    public void confirm() {
+        this.status = TripStatus.CONFIRMED;
+    }
+
+    // 방장이 나가거나 탈퇴하면 다음 멤버가 방장이 된다
+    public void changeOwner(User owner) {
+        this.user = owner;
     }
 
     private void apply(String city, LocalDate startDate, LocalDate endDate,
@@ -86,12 +95,13 @@ public class Trip extends BaseTimeEntity {
         this.companionCount = resolveCount(companion, companionCount);
     }
 
-    // 혼자·연인은 인원이 정해져 있어서 자동으로 넣고, 친구·가족은 범위 안인지 확인
+    // 혼자/연인은 인원이 정해져 있어서 자동으로 넣는다
+    // 친구/가족은 생성 화면에서 인원을 받지 않아서 없으면 최소 인원, 보냈으면 범위 안인지 확인
     private static int resolveCount(Companion companion, Integer count) {
-        if (companion.isFixedCount()) {
+        if (companion.isFixedCount() || count == null) {
             return companion.getMinCount();
         }
-        if (count == null || !companion.allows(count)) {
+        if (!companion.allows(count)) {
             throw new BusinessException(ErrorCode.INVALID_COMPANION_COUNT);
         }
         return count;

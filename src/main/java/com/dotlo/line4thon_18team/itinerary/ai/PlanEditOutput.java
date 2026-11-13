@@ -9,9 +9,11 @@ import java.util.List;
  * 번호로 받으므로, 손대지 않은 방문은 itemId가 그대로 유지된다. days에서 빠진 방문이 삭제된
  * 방문이다. 일정 생성과 달리 '넣지 못한 장소' 목록은 두지 않는다 (빠진 것이 곧 삭제다).
  *
- * @param days 일차별 방문 (방문 순서대로)
+ * @param days   일차별 방문 (방문 순서대로)
+ * @param reason 무엇을 어떻게 고쳤는지 한두 문장. 사용자에게 그대로 보여 준다. 고친 일정을 먼저 정한 뒤
+ *               쓰도록 스키마에서 days 다음에 둔다. 먼저 쓰게 하면 이유에 맞춰 일정을 짜게 된다
  */
-public record PlanEditOutput(List<Day> days) {
+public record PlanEditOutput(List<Day> days, String reason) {
 
     public record Day(int dayNumber, List<VisitRef> visits) {
 
@@ -39,5 +41,6 @@ public record PlanEditOutput(List<Day> days) {
 
     public PlanEditOutput {
         days = days == null ? List.of() : List.copyOf(days);
+        reason = reason == null ? "" : reason.strip();
     }
 }

@@ -9,5 +9,9 @@ public interface PreferenceEntityRepository extends JpaRepository<PreferenceEnti
 
     Optional<PreferenceEntity> findByTripIdAndUserId(Long tripId, Long userId);
 
+    void deleteByTripId(Long tripId);
+
+    void deleteByUserId(Long userId);
+
     List<PreferenceEntity> findAllByTripIdOrderByUserIdAsc(Long tripId);
 }

@@ -4,6 +4,7 @@ import com.dotlo.line4thon_18team.auth.LoginUser;
 import com.dotlo.line4thon_18team.trip.dto.TripCreateRequest;
 import com.dotlo.line4thon_18team.trip.dto.TripResponse;
 import com.dotlo.line4thon_18team.trip.dto.TripUpdateRequest;
+import com.dotlo.line4thon_18team.trip.service.TripDeleteService;
 import com.dotlo.line4thon_18team.trip.service.TripService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -19,6 +20,7 @@ import java.util.List;
 public class TripController {
 
     private final TripService tripService;
+    private final TripDeleteService tripDeleteService;
 
     // 여행 생성 → 201
     @PostMapping
@@ -53,5 +55,12 @@ public class TripController {
     public ResponseEntity<TripResponse> updateTrip(@LoginUser Long userId, @PathVariable Long tripId,
                                                    @Valid @RequestBody TripUpdateRequest request) {
         return ResponseEntity.ok(tripService.updateTrip(userId, tripId, request));
+    }
+
+    // 여행 삭제 (방장만) → 204
+    @DeleteMapping("/{tripId}")
+    public ResponseEntity<Void> deleteTrip(@LoginUser Long userId, @PathVariable Long tripId) {
+        tripDeleteService.deleteTrip(userId, tripId);
+        return ResponseEntity.noContent().build();
     }
 }

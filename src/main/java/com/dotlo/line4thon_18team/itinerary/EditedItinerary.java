@@ -11,7 +11,8 @@ import com.dotlo.line4thon_18team.itinerary.validation.result.ValidationResult;
  *
  * @param draft      고친 일차별 방문 순서. 손대지 않은 방문은 itemId가 그대로다
  * @param validation 계산된 시각과 문제 목록
+ * @param reason     무엇을 어떻게 고쳤는지 한두 문장. AI가 쓴 문장을 그대로 사용자에게 보여 준다
  * @param attempts   수정 시도 횟수 (1이면 처음에 바로 통과)
  */
-public record EditedItinerary(ItineraryDraft draft, ValidationResult validation, int attempts) {
+public record EditedItinerary(ItineraryDraft draft, ValidationResult validation, String reason, int attempts) {
 }

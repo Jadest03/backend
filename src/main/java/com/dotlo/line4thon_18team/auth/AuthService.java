@@ -52,7 +52,7 @@ public class AuthService {
         }
 
         TokenResponse tokens = issueTokens(user);
-        return new LoginResponse(tokens.accessToken(), tokens.refreshToken(), newUser);
+        return new LoginResponse(tokens.accessToken(), tokens.refreshToken(), newUser, user.isSignupCompleted());
     }
 
     /**

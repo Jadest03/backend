@@ -36,4 +36,14 @@ public class JpaPreferenceRepository implements PreferenceRepository {
                 .map(PreferenceEntity::toStored)
                 .toList();
     }
+
+    @Override
+    public void deleteByTrip(long tripId) {
+        entities.deleteByTripId(tripId);
+    }
+
+    @Override
+    public void deleteByUser(long userId) {
+        entities.deleteByUserId(userId);
+    }
 }

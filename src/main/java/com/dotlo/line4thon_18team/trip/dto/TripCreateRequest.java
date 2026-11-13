@@ -10,7 +10,7 @@ import java.time.LocalDate;
 /**
  * 여행 생성 요청.
  * 예) { "city": "오사카", "startDate": "2026-11-07", "endDate": "2026-11-09", "companion": "FRIEND", "companionCount": 3 }
- * companionCount 는 친구·가족일 때만 필요하다. (혼자 1명, 연인 2명은 자동)
+ * companionCount 는 생략할 수 있다. (혼자 1명, 연인 2명은 자동, 친구/가족은 없으면 2명)
  */
 public record TripCreateRequest(
 

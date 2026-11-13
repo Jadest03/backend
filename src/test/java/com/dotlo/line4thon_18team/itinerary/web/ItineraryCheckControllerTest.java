@@ -1,6 +1,8 @@
 package com.dotlo.line4thon_18team.itinerary.web;
 
 import com.dotlo.line4thon_18team.itinerary.validation.port.TravelTimeProvider;
+import com.dotlo.line4thon_18team.member.entity.TripMember;
+import com.dotlo.line4thon_18team.member.repository.TripMemberRepository;
 import com.dotlo.line4thon_18team.place.OpeningHours;
 import com.dotlo.line4thon_18team.trip.entity.Companion;
 import com.dotlo.line4thon_18team.trip.entity.Trip;
@@ -40,12 +42,14 @@ class ItineraryCheckControllerTest {
     @Autowired MockMvc mvc;
     @Autowired UserRepository users;
     @Autowired TripRepository trips;
+    @Autowired TripMemberRepository tripMembers;
 
     @MockitoBean OpeningHours openingHours;
     @MockitoBean TravelTimeProvider travelTimeProvider;
 
     private Long ownerId;
     private Long otherId;
+    private Long companionId;
     private Long tripId;
 
     @BeforeEach
@@ -53,9 +57,32 @@ class ItineraryCheckControllerTest {
         User owner = users.save(User.builder().googleSub("sub-owner-itn").email("owner@test.com").name("주인").build());
         User other = users.save(User.builder().googleSub("sub-other-itn").email("other@test.com").name("남").build());
         Trip trip = trips.save(Trip.create(owner, "오사카", START, END, Companion.ALONE, null));
+        User companion = users.save(
+                User.builder().googleSub("sub-companion-itn").email("companion@test.com").name("동행").build());
+        tripMembers.save(TripMember.create(trip, companion));
         ownerId = owner.getId();
         otherId = other.getId();
+        companionId = companion.getId();
         tripId = trip.getId();
+    }
+
+    @Test
+    void 동행자도_일정_검증을_쓸_수_있다() throws Exception {
+        mvc.perform(check(companionId, """
+                        {"origin": "USER_EDITED",
+                         "days": [{"date": "2026-11-10",
+                                   "visits": [{"itemId": "v1", "placeId": "ChIJ-a"}]}]}"""))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.days[0].visits[0].itemId").value("v1"));
+    }
+
+    @Test
+    void 구성원이_아니면_일정_검증도_404다() throws Exception {
+        mvc.perform(check(otherId, """
+                        {"origin": "USER_EDITED",
+                         "days": [{"date": "2026-11-10", "visits": []}]}"""))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value("TRIP_NOT_FOUND"));
     }
 
     @Test

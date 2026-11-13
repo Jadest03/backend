@@ -3,6 +3,7 @@ package com.dotlo.line4thon_18team.preference;
 import com.dotlo.line4thon_18team.global.llm.StructuredLlmExecutor;
 import com.dotlo.line4thon_18team.global.llm.schema.SchemaLoader;
 import com.dotlo.line4thon_18team.preference.ai.PreferenceInterpretationTask;
+import com.dotlo.line4thon_18team.user.repository.UserRepository;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
@@ -27,10 +28,22 @@ public class PreferenceConfig {
     }
 
     @Bean
+    public UserPreferenceRepository userPreferenceRepository(UserPreferenceEntityRepository entities,
+                                                             UserRepository users) {
+        return new JpaUserPreferenceRepository(entities, users);
+    }
+
+    @Bean
+    public UserPreferenceService userPreferenceService(UserPreferenceRepository userPreferenceRepository) {
+        return new UserPreferenceService(userPreferenceRepository, Clock.systemUTC());
+    }
+
+    @Bean
     public PreferenceService preferenceService(PreferenceRepository preferenceRepository,
+                                               UserPreferenceService userPreferenceService,
                                                StructuredLlmExecutor structuredLlmExecutor,
                                                PreferenceInterpretationTask preferenceInterpretationTask) {
-        return new PreferenceService(preferenceRepository, structuredLlmExecutor, preferenceInterpretationTask,
-                Clock.systemUTC());
+        return new PreferenceService(preferenceRepository, userPreferenceService, structuredLlmExecutor,
+                preferenceInterpretationTask, Clock.systemUTC());
     }
 }

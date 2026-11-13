@@ -31,7 +31,7 @@ public class PlaceSearchController {
         if (query.isBlank()) throw new BusinessException(ErrorCode.INVALID_INPUT, "query 값이 비어 있습니다.");
         // 구글이 좌표 검색어를 400으로 거절해서 502가 나던 것 → 우리 쪽 400 (이름 없는 핀 이름이 좌표라 FE가 그대로 넣을 수 있음)
         if (PlaceMatcher.isCoordinates(query)) throw new BusinessException(ErrorCode.INVALID_INPUT, "좌표로는 검색할 수 없습니다. 장소 이름을 입력해 주세요.");
-        Trip trip = tripService.findOwnedTrip(userId, tripId);   // 없는 여행·남의 여행이면 404
+        Trip trip = tripService.findMemberTrip(userId, tripId);   // 없는 여행·구성원이 아니면 404
         City city = CityController.findByName(trip.getCity())
                 .orElseThrow(() -> new BusinessException(ErrorCode.UNSUPPORTED_CITY));
         return placeMatcher.searchNear(query, city.lat(), city.lng(), SEARCH_RADIUS_M);

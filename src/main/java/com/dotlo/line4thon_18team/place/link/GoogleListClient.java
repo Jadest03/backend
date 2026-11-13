@@ -138,8 +138,7 @@ public class GoogleListClient {
         }
         JsonNode list = root.path(0);
         if (!list.isArray()) {
-            throw new BusinessException(ErrorCode.LIST_NOT_ACCESSIBLE,
-                    "비공개 리스트입니다. 리스트를 공개로 바꾼 뒤 다시 시도해 주세요.");
+            throw new BusinessException(ErrorCode.LIST_PRIVATE);
         }
 
         String listName = list.path(4).isString() && !list.path(4).asString().isBlank()

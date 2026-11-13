@@ -30,7 +30,6 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.UUID;
 
 /**
  * AI 일정 텍스트 수정 (EDIT-TEXT-001).
@@ -64,7 +63,7 @@ public class ItineraryEditService {
      * 조회는 {@link ItineraryValidationService#prepare}가 자기 트랜잭션에서 한다.
      *
      * @param current 고치기 전 일정. 일정 저장(BE1)이 생기면 저장된 최신 버전을 넣는다
-     * @param request 사용자가 말로 적은 수정 요청
+     * @param request 사용자가 텍스트로 적은 수정 요청
      * @throws BusinessException 남의 여행·없는 여행(404), 요청이 비어 있음(400)
      */
     public EditedItinerary edit(long tripId, long userId, ItineraryDraft current, String request) {
@@ -80,7 +79,7 @@ public class ItineraryEditService {
             ItineraryDraft draft = toDraft(plan, input, startDate, visitsByItemId);
             ValidationResult validation = run.validate(draft, ValidationOrigin.AI_GENERATED);
 
-            last = new EditedItinerary(draft, validation, attempt);
+            last = new EditedItinerary(draft, validation, plan.reason(), attempt);
             if (validation.summary().valid()) {
                 return last;
             }
@@ -151,16 +150,11 @@ public class ItineraryEditService {
             for (PlanEditOutput.VisitRef ref : day.visits()) {
                 visits.add(ref.isExisting()
                         ? visitsByItemId.get(ref.itemId())
-                        : VisitDraft.of(newItemId(), input.byNumber(ref.placeNumber()).placeId()));
+                        : VisitDraft.of(ItineraryItemId.newId(), input.byNumber(ref.placeNumber()).placeId()));
             }
             days.add(new DayDraft(date, visits));
         }
         return new ItineraryDraft(days);
-    }
-
-    // 새로 넣는 방문의 일정 항목 ID. #54(ItineraryItemId)가 머지되면 그 함수를 쓴다
-    private static String newItemId() {
-        return "v-" + UUID.randomUUID().toString().substring(0, 8);
     }
 
     private static List<String> describe(ValidationResult validation, ItineraryDraft draft, PlanEditInput input) {

@@ -57,7 +57,7 @@ public class ReservationService {
     private final EntityManager entityManager;
 
     public ReservationResponse get(Long userId, Long tripId) {
-        tripService.findOwnedTrip(userId, tripId);   // 없는 여행·남의 여행이면 404
+        tripService.findMemberTrip(userId, tripId);   // 없는 여행·구성원이 아니면 404
         return response(tripId);
     }
 
@@ -72,7 +72,7 @@ public class ReservationService {
 
     // 가는 편·오는 편을 보낸 값으로 바꾼다 (null이면 없음). 찾기 결과를 그대로 받아서 AeroDataBox를 다시 부르지 않는다
     public ReservationResponse putFlights(Long userId, Long tripId, FlightInfo outbound, FlightInfo returnFlight) {
-        tripService.findOwnedTrip(userId, tripId);
+        tripService.findMemberTrip(userId, tripId);
         return transactionTemplate.execute(status -> {
             Trip trip = lockTrip(tripId);
             flightRepository.deleteAllByTripId(tripId);
@@ -85,7 +85,7 @@ public class ReservationService {
 
     // 숙소 전체를 보낸 목록으로 바꾼다. 구글(장소 정보)은 처음 들어온 숙소만 부르고, 기다리는 동안 DB 연결을 잡지 않는다
     public ReservationResponse putStays(Long userId, Long tripId, List<Stay> stays) {
-        validateStays(tripService.findOwnedTrip(userId, tripId), stays);   // 구글 부르기 전에 날짜부터 확인
+        validateStays(tripService.findMemberTrip(userId, tripId), stays);   // 구글 부르기 전에 날짜부터 확인
 
         Map<String, Candidate> places = new HashMap<>();
         for (TripStay s : stayRepository.findAllByTripIdOrderByCheckInAsc(tripId)) {
@@ -108,7 +108,7 @@ public class ReservationService {
 
     // 렌터카를 보낸 값으로 바꾼다. dates가 비면 지운다. 픽업 장소가 그대로면 구글을 다시 부르지 않는다
     public ReservationResponse putRental(Long userId, Long tripId, List<LocalDate> dates, String placeId) {
-        Trip owned = tripService.findOwnedTrip(userId, tripId);
+        Trip owned = tripService.findMemberTrip(userId, tripId);
         Candidate place = null;
         if (!dates.isEmpty()) {
             boolean outOfTrip = dates.stream().anyMatch(d -> d.isBefore(owned.getStartDate()) || d.isAfter(owned.getEndDate()));

@@ -33,8 +33,11 @@ class PreferenceServiceTest {
     private static final Instant NOW = Instant.parse("2026-11-02T01:00:00Z");
 
     private final FakeLlmClient llm = new FakeLlmClient();
+    private final UserPreferenceService userPreferences = new UserPreferenceService(
+            new InMemoryUserPreferenceRepository(), Clock.fixed(NOW, ZoneOffset.UTC));
     private final PreferenceService service = new PreferenceService(
             new InMemoryPreferenceRepository(),
+            userPreferences,
             new StructuredLlmExecutor(llm, 3, 0, millis -> { }),
             new PreferenceInterpretationTask(new SchemaLoader()),
             Clock.fixed(NOW, ZoneOffset.UTC));
@@ -203,6 +206,38 @@ class PreferenceServiceTest {
                 input(TravelPace.NORMAL, List.of(), List.of(), List.of(), "가".repeat(501))))
                 .isInstanceOfSatisfying(BusinessException.class,
                         e -> assertThat(e.getErrorCode()).isEqualTo(ErrorCode.PREFERENCE_TEXT_TOO_LONG));
+    }
+
+    // ---- 일정 생성에서 쓸 취향 (여행 취향 → 사용자 기본 취향 → 기본값) ----
+
+    @Test
+    void 여행_취향이_없으면_사용자_기본_취향을_쓴다() {
+        userPreferences.save(USER, input(TravelPace.RELAXED, List.of(PlaceCategory.CAFE), List.of(), List.of(), null));
+
+        PreferenceProfile profile = service.profileOrDefault(TRIP, USER);
+
+        assertThat(profile.pace()).isEqualTo(TravelPace.RELAXED);
+        assertThat(profile.interests()).containsExactly(PlaceCategory.CAFE);
+    }
+
+    @Test
+    void 여행_취향이_있으면_그것이_사용자_기본_취향보다_앞선다() {
+        userPreferences.save(USER, input(TravelPace.RELAXED, List.of(PlaceCategory.CAFE), List.of(), List.of(), null));
+        service.save(TRIP, USER, input(TravelPace.PACKED, List.of(PlaceCategory.FOOD), List.of(), List.of(), null));
+
+        PreferenceProfile profile = service.profileOrDefault(TRIP, USER);
+
+        assertThat(profile.pace()).isEqualTo(TravelPace.PACKED);
+        assertThat(profile.interests()).containsExactly(PlaceCategory.FOOD);
+    }
+
+    @Test
+    void 사용자_기본_취향은_다른_여행에도_쓰인다() {
+        userPreferences.save(USER, input(TravelPace.RELAXED, List.of(), List.of(), List.of(), null));
+
+        assertThat(service.profileOrDefault(TRIP, USER).pace()).isEqualTo(TravelPace.RELAXED);
+        assertThat(service.profileOrDefault(99L, USER).pace()).isEqualTo(TravelPace.RELAXED);
+        assertThat(service.profileOrDefault(TRIP, 8L)).isEqualTo(PreferenceProfile.defaults());
     }
 
     private static PreferenceInput input(TravelPace pace, List<PlaceCategory> interests, List<PlaceCategory> avoid,

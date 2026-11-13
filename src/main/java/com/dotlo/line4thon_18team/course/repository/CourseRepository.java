@@ -29,6 +29,13 @@ public interface CourseRepository extends JpaRepository<Course, Long> {
             """)
     List<StopCount> countStopsByCourseIds(@Param("courseIds") List<Long> courseIds);
 
+    // 비로그인 사진 조회를 이 코스에 들어 있는 장소로만 제한할 때 쓴다.
+    @Query("""
+            select count(stop) > 0 from CourseStop stop
+            where stop.day.course.id = :courseId and stop.placeId = :placeId
+            """)
+    boolean hasStop(@Param("courseId") Long courseId, @Param("placeId") String placeId);
+
     interface StopCount {
         Long getCourseId();
         long getStopCount();

@@ -98,7 +98,7 @@ public class PlaceEnrichService {
     }
 
     private City cityOf(Long userId, Long tripId) {
-        Trip trip = tripService.findOwnedTrip(userId, tripId);   // 없는 여행·남의 여행이면 404
+        Trip trip = tripService.findMemberTrip(userId, tripId);   // 없는 여행·구성원이 아니면 404
         return CityController.findByName(trip.getCity())
                 .orElseThrow(() -> new BusinessException(ErrorCode.UNSUPPORTED_CITY));
     }

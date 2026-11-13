@@ -11,6 +11,7 @@ import com.dotlo.line4thon_18team.preference.domain.DayStartPreference;
 import com.dotlo.line4thon_18team.preference.domain.PreferenceProfile;
 import com.dotlo.line4thon_18team.preference.domain.TravelPace;
 import com.dotlo.line4thon_18team.preference.domain.WalkingPreference;
+import com.dotlo.line4thon_18team.trip.entity.Companion;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -53,9 +54,25 @@ class PlanGenerationTaskTest {
     }
 
     @Test
+    void 동행_유형을_프롬프트에_담는다() {
+        assertThat(PlanGenerationTask.userPrompt(input(3, NORMAL, Companion.FAMILY))).contains("동행: 가족");
+        assertThat(PlanGenerationTask.userPrompt(input(3, NORMAL, Companion.COUPLE))).contains("동행: 연인");
+    }
+
+    @Test
+    void 동행_유형이_없어도_나머지_프롬프트는_그대로다() {
+        // 여행에는 동행 유형이 반드시 있지만(DB not null), 없다고 일정 생성을 멈출 이유는 없다
+        String prompt = PlanGenerationTask.userPrompt(input(3, NORMAL, null));
+
+        assertThat(prompt).doesNotContain("동행:")
+                .contains("일수: 3일")
+                .contains("일정 강도: 보통 강도");
+    }
+
+    @Test
     void 장소_유형이_없으면_기타로_넣는다() {
         // 보강 전이거나 매칭에 실패한 장소는 category가 비어 있다
-        PlanGenerationInput input = PlanGenerationInput.of("오사카", 2, NORMAL, List.of(
+        PlanGenerationInput input = PlanGenerationInput.of("오사카", 2, Companion.ALONE, NORMAL, List.of(
                 new PlaceRef("p-unknown", "이름만 있는 장소", null)));
 
         assertThat(input.byNumber(1).category()).isEqualTo(PlaceCategory.OTHER);
@@ -195,7 +212,11 @@ class PlanGenerationTaskTest {
     }
 
     private static PlanGenerationInput input(int dayCount, PreferenceProfile preferences) {
-        return PlanGenerationInput.of("오사카", dayCount, preferences, List.of(
+        return input(dayCount, preferences, Companion.FRIEND);
+    }
+
+    private static PlanGenerationInput input(int dayCount, PreferenceProfile preferences, Companion companion) {
+        return PlanGenerationInput.of("오사카", dayCount, companion, preferences, List.of(
                 new PlaceRef("p-dotonbori", "도톤보리", PlaceCategory.SIGHTSEEING),
                 new PlaceRef("p-kuromon", "구로몬 시장", PlaceCategory.FOOD),
                 new PlaceRef("p-castle", "오사카성", PlaceCategory.CULTURE),

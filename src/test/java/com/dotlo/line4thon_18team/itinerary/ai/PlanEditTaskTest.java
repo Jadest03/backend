@@ -63,8 +63,23 @@ class PlanEditTaskTest {
     // ---- normalize ----
 
     @Test
+    void 일차를_정렬해도_수정_이유가_남는다() {
+        PlanEditOutput output = new PlanEditOutput(
+                List.of(day(2, keep("v-ccc33333")), day(1, keep("v-aaa11111"))), "  2일차 점심을 뺐습니다.  ");
+
+        assertThat(task.normalize(output).reason()).isEqualTo("2일차 점심을 뺐습니다.");
+    }
+
+    @Test
+    void 수정_이유가_없으면_빈_문자열로_둔다() {
+        PlanEditOutput output = new PlanEditOutput(List.of(day(1, keep("v-aaa11111"))), null);
+
+        assertThat(output.reason()).isEmpty();
+    }
+
+    @Test
     void 일차_순서로_정렬한다() {
-        PlanEditOutput output = new PlanEditOutput(List.of(day(2, keep("v-ccc33333")), day(1, keep("v-aaa11111"))));
+        PlanEditOutput output = plan(List.of(day(2, keep("v-ccc33333")), day(1, keep("v-aaa11111"))));
 
         assertThat(task.normalize(output).days()).extracting(PlanEditOutput.Day::dayNumber)
                 .containsExactly(1, 2);
@@ -72,7 +87,7 @@ class PlanEditTaskTest {
 
     @Test
     void 빈_문자열_itemId는_없는_것으로_본다() {
-        PlanEditOutput output = new PlanEditOutput(List.of(day(1, new VisitRef("  ", 1))));
+        PlanEditOutput output = plan(List.of(day(1, new VisitRef("  ", 1))));
 
         VisitRef visit = task.normalize(output).days().get(0).visits().get(0);
         assertThat(visit.itemId()).isNull();
@@ -84,7 +99,7 @@ class PlanEditTaskTest {
     @Test
     void 지금_일정_그대로면_문제가_없다() {
         PlanEditInput input = input("그대로 둬 주세요");
-        PlanEditOutput output = new PlanEditOutput(List.of(
+        PlanEditOutput output = plan(List.of(
                 day(1, keep("v-aaa11111"), keep("v-bbb22222")),
                 day(2, keep("v-ccc33333"))));
 
@@ -94,7 +109,7 @@ class PlanEditTaskTest {
     @Test
     void 방문을_빼는_것은_문제가_아니다() {
         PlanEditInput input = input("구로몬 시장 빼 주세요");
-        PlanEditOutput output = new PlanEditOutput(List.of(
+        PlanEditOutput output = plan(List.of(
                 day(1, keep("v-aaa11111")),
                 day(2, keep("v-ccc33333"))));
 
@@ -104,7 +119,7 @@ class PlanEditTaskTest {
     @Test
     void 장소를_추가하는_것도_문제가_없다() {
         PlanEditInput input = input("둘째 날에 스파월드 넣어 주세요");
-        PlanEditOutput output = new PlanEditOutput(List.of(
+        PlanEditOutput output = plan(List.of(
                 day(1, keep("v-aaa11111"), keep("v-bbb22222")),
                 day(2, keep("v-ccc33333"), add(1))));
 
@@ -113,7 +128,7 @@ class PlanEditTaskTest {
 
     @Test
     void 지금_일정에_없는_itemId는_문제다() {
-        PlanEditOutput output = new PlanEditOutput(List.of(
+        PlanEditOutput output = plan(List.of(
                 day(1, keep("v-aaa11111"), keep("v-zzz99999")),
                 day(2, keep("v-ccc33333"))));
 
@@ -123,7 +138,7 @@ class PlanEditTaskTest {
 
     @Test
     void itemId와_placeNumber를_같이_채우면_문제다() {
-        PlanEditOutput output = new PlanEditOutput(List.of(
+        PlanEditOutput output = plan(List.of(
                 day(1, new VisitRef("v-aaa11111", 1)),
                 day(2, keep("v-ccc33333"))));
 
@@ -133,7 +148,7 @@ class PlanEditTaskTest {
 
     @Test
     void 둘_다_비어_있으면_문제다() {
-        PlanEditOutput output = new PlanEditOutput(List.of(
+        PlanEditOutput output = plan(List.of(
                 day(1, new VisitRef(null, null)),
                 day(2, keep("v-ccc33333"))));
 
@@ -143,7 +158,7 @@ class PlanEditTaskTest {
 
     @Test
     void 추가_목록에_없는_번호는_문제다() {
-        PlanEditOutput output = new PlanEditOutput(List.of(
+        PlanEditOutput output = plan(List.of(
                 day(1, keep("v-aaa11111"), add(9)),
                 day(2, keep("v-ccc33333"))));
 
@@ -153,7 +168,7 @@ class PlanEditTaskTest {
 
     @Test
     void 같은_방문이_두_번_들어가면_문제다() {
-        PlanEditOutput output = new PlanEditOutput(List.of(
+        PlanEditOutput output = plan(List.of(
                 day(1, keep("v-aaa11111")),
                 day(2, keep("v-aaa11111"), keep("v-ccc33333"))));
 
@@ -163,7 +178,7 @@ class PlanEditTaskTest {
 
     @Test
     void 같은_장소를_두_번_추가하면_문제다() {
-        PlanEditOutput output = new PlanEditOutput(List.of(
+        PlanEditOutput output = plan(List.of(
                 day(1, keep("v-aaa11111"), add(1)),
                 day(2, keep("v-ccc33333"), add(1))));
 
@@ -173,7 +188,7 @@ class PlanEditTaskTest {
 
     @Test
     void 일차가_빠지면_문제다() {
-        PlanEditOutput output = new PlanEditOutput(List.of(day(1, keep("v-aaa11111"))));
+        PlanEditOutput output = plan(List.of(day(1, keep("v-aaa11111"))));
 
         assertThat(task.validate(input("아무거나"), output))
                 .anySatisfy(problem -> assertThat(problem).contains("2일차가 빠졌습니다"));
@@ -181,7 +196,7 @@ class PlanEditTaskTest {
 
     @Test
     void 여행_기간_밖_일차는_문제다() {
-        PlanEditOutput output = new PlanEditOutput(List.of(
+        PlanEditOutput output = plan(List.of(
                 day(1, keep("v-aaa11111")), day(2, keep("v-ccc33333")), day(3, keep("v-bbb22222"))));
 
         assertThat(task.validate(input("아무거나"), output))
@@ -238,6 +253,10 @@ class PlanEditTaskTest {
 
     private static CurrentVisit visit(String itemId, String name, PlaceCategory category) {
         return new CurrentVisit(itemId, "place-" + itemId, name, category);
+    }
+
+    private static PlanEditOutput plan(List<PlanEditOutput.Day> days) {
+        return new PlanEditOutput(days, "요청대로 고쳤습니다.");
     }
 
     private static PlanEditOutput.Day day(int dayNumber, VisitRef... visits) {

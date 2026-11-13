@@ -1,7 +1,12 @@
 package com.dotlo.line4thon_18team.itinerary.version;
 
+import com.dotlo.line4thon_18team.itinerary.ItineraryValidationService;
+import com.dotlo.line4thon_18team.itinerary.validation.model.ItineraryDraft;
 import com.dotlo.line4thon_18team.itinerary.validation.port.TravelTimeProvider;
+import com.dotlo.line4thon_18team.itinerary.validation.result.ValidationResult;
+import com.dotlo.line4thon_18team.itinerary.version.entity.ItinerarySource;
 import com.dotlo.line4thon_18team.itinerary.version.repository.ItineraryVersionRepository;
+import com.dotlo.line4thon_18team.itinerary.version.service.ItineraryService;
 import com.dotlo.line4thon_18team.place.OpeningHours;
 import com.dotlo.line4thon_18team.trip.entity.Companion;
 import com.dotlo.line4thon_18team.trip.entity.Trip;
@@ -17,13 +22,21 @@ import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.http.MediaType;
 import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
+import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultActions;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.TransactionDefinition;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import java.time.LocalDate;
+import java.util.List;
 import java.util.UUID;
 
 import static org.hamcrest.Matchers.startsWith;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.Mockito.doAnswer;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -45,8 +58,12 @@ class ItineraryManualSaveTest {
     @Autowired TripRepository trips;
     @Autowired ItineraryVersionRepository itineraryVersions;
 
+    @Autowired ItineraryService itineraryService;
+    @Autowired PlatformTransactionManager transactionManager;
+
     @MockitoBean OpeningHours openingHours;
     @MockitoBean TravelTimeProvider travelTimeProvider;
+    @MockitoSpyBean ItineraryValidationService itineraryValidationService;
 
     private User owner;
     private User other;
@@ -86,6 +103,22 @@ class ItineraryManualSaveTest {
     @Test
     void 일정이_있는데_baseVersion이_없으면_409() throws Exception {
         save(owner, oneDay(null)).andExpect(status().isCreated());
+
+        save(owner, oneDay(null))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("ITINERARY_VERSION_CONFLICT"));
+    }
+
+    @Test
+    void 검증하는_사이에_다른_저장이_들어오면_409() throws Exception {
+        // 처음 저장(baseVersion 없음)이 검증하는 동안 다른 요청이 먼저 v1을 저장한 상황 (다른 요청이라 트랜잭션을 따로 연다)
+        TransactionTemplate otherRequest = new TransactionTemplate(transactionManager);
+        otherRequest.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
+        doAnswer(invocation -> {
+            otherRequest.executeWithoutResult(status -> itineraryService.save(trip.getId(), owner.getId(),
+                    ItinerarySource.AI_GENERATED, null, ItineraryDraft.of(), ValidationResult.of(List.of(), List.of())));
+            return invocation.callRealMethod();
+        }).when(itineraryValidationService).validate(anyLong(), anyLong(), any(), any());
 
         save(owner, oneDay(null))
                 .andExpect(status().isConflict())

@@ -71,6 +71,22 @@ class JpaPreferenceRepositoryTest {
     }
 
     @Test
+    void 탈퇴한_사용자의_취향만_여행마다_지운다() {
+        repository.save(new StoredPreference(TRIP, 7L, PreferenceProfile.defaults(), "내가 쓴 문장", T1));
+        repository.save(new StoredPreference(TRIP + 1, 7L, PreferenceProfile.defaults(), null, T1));
+        repository.save(new StoredPreference(TRIP, 8L, PreferenceProfile.defaults(), null, T1));
+        em.flush();
+
+        repository.deleteByUser(7L);
+        em.flush();
+        em.clear();
+
+        assertThat(repository.findByTripAndUser(TRIP, 7L)).isEmpty();
+        assertThat(repository.findByTripAndUser(TRIP + 1, 7L)).isEmpty();
+        assertThat(repository.findByTripAndUser(TRIP, 8L)).isPresent();   // 남은 사람 것은 그대로
+    }
+
+    @Test
     void 저장한_적이_없으면_빈_값이다() {
         assertThat(repository.findByTripAndUser(TRIP, 404L)).isEmpty();
     }

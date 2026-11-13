@@ -42,6 +42,11 @@ public class CourseService {
                 .toList();
     }
 
+    // 코스에 없는 장소(또는 없는 코스)는 사진도 없다고 본다
+    public void requireStop(long courseId, String placeId) {
+        if (!courseRepository.hasStop(courseId, placeId)) throw new BusinessException(ErrorCode.PHOTO_NOT_FOUND);
+    }
+
     public CourseDetailResponse get(long courseId) {
         if (courseId < 1) {
             throw new BusinessException(ErrorCode.INVALID_INPUT, "courseId는 양수여야 합니다.");

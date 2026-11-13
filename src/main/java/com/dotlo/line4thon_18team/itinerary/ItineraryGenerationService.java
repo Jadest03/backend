@@ -12,6 +12,9 @@ import com.dotlo.line4thon_18team.itinerary.validation.model.ItineraryDraft;
 import com.dotlo.line4thon_18team.itinerary.validation.model.ValidationOrigin;
 import com.dotlo.line4thon_18team.itinerary.validation.model.VisitDraft;
 import com.dotlo.line4thon_18team.itinerary.validation.result.ValidationResult;
+import com.dotlo.line4thon_18team.itinerary.version.dto.ItineraryVersionView;
+import com.dotlo.line4thon_18team.itinerary.version.entity.ItinerarySource;
+import com.dotlo.line4thon_18team.itinerary.version.service.ItineraryService;
 import com.dotlo.line4thon_18team.place.entity.PlaceMatchStatus;
 import com.dotlo.line4thon_18team.place.entity.SavedPlace;
 import com.dotlo.line4thon_18team.trip.entity.Trip;
@@ -37,7 +40,6 @@ import java.util.Map;
  * </pre>
  *
  * <p>AI는 "어떤 장소를 며칠째 몇 번째로" 까지만 정하고, 시각은 검증기가 이동시간·영업시간으로 계산한다.
- * 아직 저장하지 않는다. 일정 저장(BE1)이 생기면 결과를 v1으로 저장한다.
  */
 @Service
 @RequiredArgsConstructor
@@ -52,8 +54,25 @@ public class ItineraryGenerationService {
     private final ItineraryValidationService validationService;
     private final StructuredLlmExecutor llm;
     private final PlanGenerationTask planGenerationTask;
+    private final ItineraryService itineraryService;   // BE1 일정 저장
 
     /**
+     * 일정을 만들어 새 버전으로 저장한다 (GEN-PLAN-001). API에서 부르는 진입점이다.
+     *
+     * <p>저장은 AI 응답을 다 받은 뒤 한 번만 일어난다. 중간에 실패하면 아무것도 저장되지 않는다.
+     *
+     * @throws BusinessException 남의 여행·없는 여행(404), 배치할 장소가 없음(400), 숙소를 일부만 넣음(400)
+     */
+    public GeneratedItineraryVersion generateAndSave(long tripId, long userId) {
+        GeneratedItinerary generated = generate(tripId, userId);
+        ItineraryVersionView saved = itineraryService.save(tripId, userId, ItinerarySource.AI_GENERATED, null,
+                generated.draft(), generated.validation());
+        return new GeneratedItineraryVersion(saved, generated.excludedPlaceIds());
+    }
+
+    /**
+     * 일정을 만들기만 하고 저장하지 않는다. 저장까지 하려면 {@link #generateAndSave}를 쓴다.
+     *
      * <p>이 메서드에는 트랜잭션을 걸지 않는다. AI 응답을 기다리는 동안 DB 연결을 쥐고 있지 않기 위해서다.
      * 조회는 {@link ItineraryValidationService#prepare}가 자기 트랜잭션에서 하고, 돌려받은 엔티티는
      * 기본 필드만 읽는다 (연관 관계를 더 타면 트랜잭션이 이미 닫혀 있다).
@@ -93,7 +112,7 @@ public class ItineraryGenerationService {
         }
         Trip trip = run.trip();
         int dayCount = (int) ChronoUnit.DAYS.between(trip.getStartDate(), trip.getEndDate()) + 1;
-        return PlanGenerationInput.of(trip.getCity(), dayCount, run.preferences(), candidates);
+        return PlanGenerationInput.of(trip.getCity(), dayCount, trip.getCompanion(), run.preferences(), candidates);
     }
 
     /** 장소 번호를 place ID로 되돌리고 itemId를 새로 만든다. */

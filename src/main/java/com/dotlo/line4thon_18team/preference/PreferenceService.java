@@ -31,13 +31,16 @@ public class PreferenceService {
     private static final Logger log = LoggerFactory.getLogger(PreferenceService.class);
 
     private final PreferenceRepository repository;
+    private final UserPreferenceService userPreferences;
     private final StructuredLlmExecutor llm;
     private final PreferenceInterpretationTask interpretationTask;
     private final Clock clock;
 
-    public PreferenceService(PreferenceRepository repository, StructuredLlmExecutor llm,
-                             PreferenceInterpretationTask interpretationTask, Clock clock) {
+    public PreferenceService(PreferenceRepository repository, UserPreferenceService userPreferences,
+                             StructuredLlmExecutor llm, PreferenceInterpretationTask interpretationTask,
+                             Clock clock) {
         this.repository = Objects.requireNonNull(repository, "repository");
+        this.userPreferences = Objects.requireNonNull(userPreferences, "userPreferences");
         this.llm = Objects.requireNonNull(llm, "llm");
         this.interpretationTask = Objects.requireNonNull(interpretationTask, "interpretationTask");
         this.clock = Objects.requireNonNull(clock, "clock");
@@ -104,10 +107,14 @@ public class PreferenceService {
                 .orElseGet(() -> PreferenceView.defaults(tripId, userId));
     }
 
-    /** 일정 생성에서 쓸 취향. 저장한 적이 없으면 기본값. */
+    /**
+     * 일정 생성·수정에서 쓸 취향. 이 여행에 취향을 입력했으면 그것, 아니면 가입할 때 고른
+     * 사용자 기본 취향, 그것도 없으면 기본값(보통)을 쓴다.
+     */
     public PreferenceProfile profileOrDefault(long tripId, long userId) {
         return repository.findByTripAndUser(tripId, userId)
                 .map(StoredPreference::profile)
+                .or(() -> userPreferences.profile(userId))
                 .orElseGet(PreferenceProfile::defaults);
     }
 

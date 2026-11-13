@@ -2,7 +2,7 @@
   "type": "object",
   "description": "사용자 요청에 맞게 고친 일정 전체",
   "additionalProperties": false,
-  "required": ["days"],
+  "required": ["days", "reason"],
   "properties": {
     "days": {
       "type": "array",
@@ -37,6 +37,10 @@
           }
         }
       }
+    },
+    "reason": {
+      "type": "string",
+      "description": "무엇을 어떻게 고쳤는지 한두 문장. 사용자에게 그대로 보여 주는 문장이다. 일정을 정한 뒤에 쓴다"
     }
   }
 }

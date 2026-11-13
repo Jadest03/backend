@@ -56,7 +56,7 @@ class PlaceEnrichServiceTest {
         trip = Trip.create(User.builder().googleSub("s").email("a@b.c").name("n").build(),
                 "오사카", start, start.plusDays(2), Companion.ALONE, null);
         ReflectionTestUtils.setField(trip, "id", 7L);
-        when(tripService.findOwnedTrip(1L, 7L)).thenReturn(trip);
+        when(tripService.findMemberTrip(1L, 7L)).thenReturn(trip);
         when(entityManager.find(Trip.class, 7L, LockModeType.PESSIMISTIC_WRITE)).thenReturn(trip);
     }
 

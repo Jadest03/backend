@@ -59,7 +59,7 @@ public class ItineraryValidationService {
 
     /**
      * @param origin AI가 만든 일정이면 AI_GENERATED(일정 충돌을 오류로), 사용자가 직접 고친 일정이면 USER_EDITED(경고로)
-     * @throws BusinessException 남의 여행·없는 여행(404), 일정 입력이 잘못된 경우(400)
+     * @throws BusinessException 구성원이 아닌 여행·없는 여행(404), 일정 입력이 잘못된 경우(400)
      */
     public ValidationResult validate(long tripId, long userId, ItineraryDraft draft, ValidationOrigin origin) {
         return prepare(tripId, userId).validate(draft, origin);
@@ -68,10 +68,10 @@ public class ItineraryValidationService {
     /**
      * 여행·저장 장소·취향을 한 번만 읽어두고 여러 번 검증할 때 쓴다 (일정 생성에서 재생성할 때).
      *
-     * @throws BusinessException 남의 여행·없는 여행(404)
+     * @throws BusinessException 구성원이 아닌 여행·없는 여행(404)
      */
     ValidationRun prepare(long tripId, long userId) {
-        Trip trip = tripService.findOwnedTrip(userId, tripId);
+        Trip trip = tripService.findMemberTrip(userId, tripId);
         List<SavedPlace> places = savedPlaceRepository.findAllByTripIdOrderByIdAsc(tripId);
         ItineraryValidator validator = new ItineraryValidator(
                 new SavedPlaceInfoProvider(places, openingHours::get), travelTimeProvider, validationPolicy);

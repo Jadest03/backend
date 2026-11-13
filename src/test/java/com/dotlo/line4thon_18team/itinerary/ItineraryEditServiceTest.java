@@ -43,13 +43,28 @@ class ItineraryEditServiceTest {
             new PlanEditTask(new SchemaLoader()));
 
     @Test
+    void 수정_이유를_그대로_돌려준다() {
+        given(matched(DOTONBORI), matched(KUROMON));
+        llm.thenReturn("""
+                {"days": [{"dayNumber": 1, "visits": [{"itemId": "v-aaa", "placeNumber": null}]},
+                          {"dayNumber": 2, "visits": [{"itemId": "v-bbb", "placeNumber": null}]},
+                          {"dayNumber": 3, "visits": []},
+                          {"dayNumber": 4, "visits": []}], "reason": "둘째 날 일정을 하나 줄였습니다."}
+                """);
+
+        EditedItinerary result = service.edit(1L, 7L, current(), "둘째 날 줄여 주세요");
+
+        assertThat(result.reason()).isEqualTo("둘째 날 일정을 하나 줄였습니다.");
+    }
+
+    @Test
     void 손대지_않은_방문은_itemId가_그대로다() {
         given(matched(DOTONBORI), matched(KUROMON), matched(OSAKA_CASTLE));
         llm.thenReturn("""
                 {"days": [{"dayNumber": 1, "visits": [{"itemId": "v-aaa", "placeNumber": null}]},
                           {"dayNumber": 2, "visits": [{"itemId": "v-bbb", "placeNumber": null}]},
                           {"dayNumber": 3, "visits": []},
-                          {"dayNumber": 4, "visits": []}]}
+                          {"dayNumber": 4, "visits": []}], "reason": "요청대로 고쳤습니다."}
                 """);
 
         EditedItinerary result = service.edit(1L, 7L, current(), "둘째 날로 하나 옮겨 주세요");
@@ -70,7 +85,7 @@ class ItineraryEditServiceTest {
                           {"dayNumber": 2, "visits": [{"itemId": "v-bbb", "placeNumber": null},
                                                       {"itemId": "v-aaa", "placeNumber": null}]},
                           {"dayNumber": 3, "visits": []},
-                          {"dayNumber": 4, "visits": []}]}
+                          {"dayNumber": 4, "visits": []}], "reason": "요청대로 고쳤습니다."}
                 """);
 
         EditedItinerary result = service.edit(1L, 7L, current, "도톤보리를 둘째 날로");
@@ -89,7 +104,7 @@ class ItineraryEditServiceTest {
                                                       {"itemId": null, "placeNumber": 1}]},
                           {"dayNumber": 2, "visits": [{"itemId": "v-bbb", "placeNumber": null}]},
                           {"dayNumber": 3, "visits": []},
-                          {"dayNumber": 4, "visits": []}]}
+                          {"dayNumber": 4, "visits": []}], "reason": "요청대로 고쳤습니다."}
                 """);
 
         EditedItinerary result = service.edit(1L, 7L, current(), "첫날에 오사카성 넣어 주세요");
@@ -126,13 +141,13 @@ class ItineraryEditServiceTest {
                                                       {"itemId": "v-ccc", "placeNumber": null}]},
                           {"dayNumber": 2, "visits": []},
                           {"dayNumber": 3, "visits": []},
-                          {"dayNumber": 4, "visits": []}]}
+                          {"dayNumber": 4, "visits": []}], "reason": "요청대로 고쳤습니다."}
                 """);
         llm.thenReturn("""
                 {"days": [{"dayNumber": 1, "visits": [{"itemId": "v-aaa", "placeNumber": null}]},
                           {"dayNumber": 2, "visits": [{"itemId": "v-ccc", "placeNumber": null}]},
                           {"dayNumber": 3, "visits": []},
-                          {"dayNumber": 4, "visits": []}]}
+                          {"dayNumber": 4, "visits": []}], "reason": "요청대로 고쳤습니다."}
                 """);
 
         EditedItinerary result = service.edit(1L, 7L, current, "카페를 첫날로");
@@ -156,7 +171,7 @@ class ItineraryEditServiceTest {
                                                       {"itemId": "v-ccc", "placeNumber": null}]},
                           {"dayNumber": 2, "visits": []},
                           {"dayNumber": 3, "visits": []},
-                          {"dayNumber": 4, "visits": []}]}
+                          {"dayNumber": 4, "visits": []}], "reason": "요청대로 고쳤습니다."}
                 """;
         llm.thenReturn(closedDay).thenReturn(closedDay).thenReturn(closedDay);
 
@@ -173,7 +188,7 @@ class ItineraryEditServiceTest {
                 {"days": [{"dayNumber": 1, "visits": [{"itemId": "v-aaa", "placeNumber": null}]},
                           {"dayNumber": 2, "visits": [{"itemId": "v-bbb", "placeNumber": null}]},
                           {"dayNumber": 3, "visits": []},
-                          {"dayNumber": 4, "visits": []}]}
+                          {"dayNumber": 4, "visits": []}], "reason": "요청대로 고쳤습니다."}
                 """;
     }
 
