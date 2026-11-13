@@ -160,7 +160,12 @@ class ItemInteractionApiTest {
     @Test
     void 일정에서_빠진_장소는_목록에서_숨기고_새로_쓸_수_없다() throws Exception {
         comment(owner.getId(), B, "여기도요", null);
+        perform(post(itemUrl(B, "likes")), member.getId()).andExpect(status().isOk());
         saveItinerary(A);
+
+        perform(delete(itemUrl(B, "likes")), member.getId())   // 취소는 된다
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.count").value(0));
 
         list(owner.getId())
                 .andExpect(jsonPath("$.items.length()").value(1))

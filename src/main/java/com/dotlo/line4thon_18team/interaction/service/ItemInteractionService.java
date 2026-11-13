@@ -34,7 +34,7 @@ import java.util.stream.Collectors;
  * 일정 항목(방문 장소) 좋아요·댓글·답글, 댓글 좋아요. 여행 구성원만 쓸 수 있고 아니면 404.
  *
  * <p>항목은 일정 버전이 바뀌어도 유지되는 itemId 로 붙는다. 최신 일정에서 빠진 항목은 기록을 남기고
- * 목록에서만 숨기며, 그 항목에 새로 쓰면 ITEM_NOT_FOUND. 공항·숙소 카드는 itemId 가 없어서 아직 안 된다.
+ * 목록에서만 숨기며, 그 항목에 새로 좋아요·댓글을 달면 ITEM_NOT_FOUND (취소·삭제는 된다). 공항·숙소 카드는 itemId 가 없어서 아직 안 된다.
  *
  * <p>쓰기는 여행 행을 잠근다. 같은 사람이 좋아요를 두 번 빠르게 눌러도 한 줄만 생긴다.
  * 잠근 뒤 다른 요청이 커밋한 행이 보이도록 READ_COMMITTED 로 연다 (나가기·초대 수락과 같은 이유).
@@ -63,9 +63,9 @@ public class ItemInteractionService {
     }
 
     @Transactional(isolation = Isolation.READ_COMMITTED)
+    // 취소는 일정에서 빠진 장소여도 된다 (내 좋아요를 거두는 건 막을 이유가 없다)
     public LikeResult unlikeItem(Long userId, Long tripId, String itemId) {
         lockMemberTrip(userId, tripId);
-        requireActiveItem(tripId, itemId);
         itemLikes.deleteByTripIdAndItemIdAndUserId(tripId, itemId, userId);
         return new LikeResult(itemLikes.countByTripIdAndItemId(tripId, itemId), false);
     }
