@@ -16,6 +16,7 @@ import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Clock;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.regex.Pattern;
@@ -31,6 +32,7 @@ public class UserService {
     private final UserRepository userRepository;
     private final SavedPlaceRepository savedPlaceRepository;
     private final TripRepository tripRepository;
+    private final Clock clock;
 
     public UserResponse getMe(Long userId) {
         return UserResponse.from(findUser(userId));
@@ -73,7 +75,7 @@ public class UserService {
         return new MyStatsResponse(
                 savedPlaceRepository.countInMyTrips(userId),
                 0,
-                tripRepository.countEndedMyTrips(userId, LocalDate.now()));
+                tripRepository.countEndedMyTrips(userId, LocalDate.now(clock)));
     }
 
     private void validateNewNickname(Long userId, String nickname) {
