@@ -13,14 +13,20 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Primary;
 import org.springframework.http.MediaType;
 import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultActions;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Clock;
+import java.time.Instant;
 import java.time.LocalDate;
+import java.time.ZoneId;
 import java.util.UUID;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -36,6 +42,18 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @TestPropertySource(properties = "auth.dev-header-enabled=true")
 @Transactional
 class UserControllerTest {
+
+    // 오늘 = 2026-12-01 00:30 (한국). UTC 로는 아직 11/30 이라, 한국 날짜로 세는지도 같이 본다
+    private static final LocalDate TODAY = LocalDate.of(2026, 12, 1);
+
+    @TestConfiguration
+    static class FixedClock {
+        @Bean
+        @Primary
+        Clock fixedClock() {
+            return Clock.fixed(Instant.parse("2026-11-30T15:30:00Z"), ZoneId.of("Asia/Seoul"));
+        }
+    }
 
     @Autowired MockMvc mvc;
     @Autowired UserRepository users;
@@ -102,15 +120,17 @@ class UserControllerTest {
     }
 
     @Test
-    void 통계는_내가_만든_여행과_참여한_여행을_센다() throws Exception {
-        LocalDate past = LocalDate.of(2025, 1, 10);
-        LocalDate future = LocalDate.of(2027, 1, 10);
-        Trip endedMine = trips.save(Trip.create(me, "오사카", past, past.plusDays(2), Companion.ALONE, null));
-        Trip joined = trips.save(Trip.create(other, "교토", future, future.plusDays(1), Companion.FRIEND, null));
-        Trip notMine = trips.save(Trip.create(other, "도쿄", past, past.plusDays(1), Companion.ALONE, null));
+    void 통계는_내가_만든_여행과_참여한_여행을_한국_날짜로_센다() throws Exception {
+        Trip endedYesterday = trips.save(Trip.create(me, "오사카", TODAY.minusDays(3), TODAY.minusDays(1),
+                Companion.ALONE, null));
+        trips.save(Trip.create(me, "도쿄", TODAY.minusDays(1), TODAY, Companion.ALONE, null));   // 오늘 끝남: 아직 아님
+        Trip joined = trips.save(Trip.create(other, "교토", TODAY.minusDays(5), TODAY.minusDays(2),
+                Companion.FRIEND, null));
+        Trip notMine = trips.save(Trip.create(other, "도쿄", TODAY.minusDays(5), TODAY.minusDays(2),
+                Companion.ALONE, null));
         tripMembers.save(TripMember.create(joined, me));
-        savePlace(endedMine);
-        savePlace(endedMine);
+        savePlace(endedYesterday);
+        savePlace(endedYesterday);
         savePlace(joined);
         savePlace(notMine);
 
@@ -118,7 +138,7 @@ class UserControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.savedPlaceCount").value(3))
                 .andExpect(jsonPath("$.savedCourseCount").value(0))
-                .andExpect(jsonPath("$.completedTripCount").value(1));
+                .andExpect(jsonPath("$.completedTripCount").value(2));
     }
 
     private ResultActions updateProfile(User user, String nickname, String bio, int characterId) throws Exception {

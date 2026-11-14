@@ -1,0 +1,27 @@
+{
+  "type": "object",
+  "description": "검색 결과 중 투표에 올릴 장소",
+  "additionalProperties": false,
+  "required": ["picks"],
+  "properties": {
+    "picks": {
+      "type": "array",
+      "description": "투표에 올릴 장소. 목록에 있는 번호만 쓴다",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["number", "tagline"],
+        "properties": {
+          "number": {
+            "type": "integer",
+            "description": "장소 번호. 목록에 없는 번호를 쓰지 않는다"
+          },
+          "tagline": {
+            "type": "string",
+            "description": "장소 유형 한 단어 (공원, 수족관, 전망대, 시장 등). 가격·영업시간·평가는 쓰지 않는다"
+          }
+        }
+      }
+    }
+  }
+}

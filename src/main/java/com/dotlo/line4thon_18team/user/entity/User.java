@@ -1,6 +1,7 @@
 package com.dotlo.line4thon_18team.user.entity;
 
 import com.dotlo.line4thon_18team.global.entity.BaseTimeEntity;
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 import lombok.AccessLevel;
 import lombok.Builder;
@@ -97,6 +98,7 @@ public class User extends BaseTimeEntity {
         this.locationAgreedAt = locationAgreed ? now : null;
     }
 
+    @JsonIgnore
     public boolean isSignupCompleted() {
         return termsAgreedAt != null;
     }
@@ -116,11 +118,14 @@ public class User extends BaseTimeEntity {
         this.withdrawnAt = now;
     }
 
+    @JsonIgnore
     public boolean isWithdrawn() {
         return withdrawnAt != null;
     }
 
     // 다른 사람에게 보이는 이름. 닉네임을 정하기 전이면 구글 이름
+    // 필드가 아니라 계산한 값이라, User 를 그대로 JSON 으로 내보내는 일이 생겨도 따라 나가지 않게 막는다
+    @JsonIgnore
     public String getDisplayName() {
         if (isWithdrawn()) {
             return "탈퇴한 사용자";

@@ -1,0 +1,19 @@
+{
+  "type": "object",
+  "description": "조율 방향에 맞는 장소를 찾기 위한 검색어와 투표 질문",
+  "additionalProperties": false,
+  "required": ["queries", "question"],
+  "properties": {
+    "queries": {
+      "type": "array",
+      "description": "장소 검색에 넣을 검색어 2~4개. 서로 다른 종류의 장소가 나오게 쓴다",
+      "items": {
+        "type": "string"
+      }
+    },
+    "question": {
+      "type": "string",
+      "description": "투표 카드 맨 위에 나올 질문 한 줄. 20자 안팎. 대화에 날짜가 있으면 넣는다. 검색어를 정한 뒤에 쓴다"
+    }
+  }
+}
