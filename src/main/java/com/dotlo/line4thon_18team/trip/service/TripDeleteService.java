@@ -13,6 +13,7 @@ import com.dotlo.line4thon_18team.trip.entity.Trip;
 import com.dotlo.line4thon_18team.trip.repository.TripRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
@@ -33,10 +34,17 @@ public class TripDeleteService {
     private final TripInviteRepository tripInviteRepository;
     private final TripMemberRepository tripMemberRepository;
 
-    // 방장만 지울 수 있다. 구성원이면 403, 구성원도 아니면 404
-    @Transactional
+    /**
+     * 방장만 지울 수 있다. 구성원이면 403, 구성원도 아니면 404.
+     * 여행 행을 먼저 잠근다. 채팅 메시지·좋아요·댓글 저장도 같은 잠금을 잡아서, 정리하는 사이 새 행이 생겨
+     * 여행 삭제가 외래키 오류로 실패하는 일이 없다. 잠근 뒤 다른 요청이 커밋한 행까지 지우도록 READ_COMMITTED
+     * 로 연다 (나가기와 같은 이유).
+     */
+    @Transactional(isolation = Isolation.READ_COMMITTED)
     public void deleteTrip(Long userId, Long tripId) {
-        Trip trip = tripService.findMemberTrip(userId, tripId);
+        Trip trip = tripRepository.findByIdForUpdate(tripId)
+                .filter(found -> tripService.isMember(found, userId))
+                .orElseThrow(() -> new BusinessException(ErrorCode.TRIP_NOT_FOUND));
         if (!trip.getUser().getId().equals(userId)) {
             throw new BusinessException(ErrorCode.TRIP_OWNER_ONLY);
         }

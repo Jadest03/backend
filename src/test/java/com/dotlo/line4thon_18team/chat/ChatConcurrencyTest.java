@@ -27,11 +27,12 @@ import java.util.concurrent.TimeUnit;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * 먼저 id 를 받은 메시지가 늦게 커밋돼도 after 커서 폴링에서 빠지지 않는지.
+ * 메시지 저장이 다른 요청과 겹칠 때: 먼저 id 를 받은 메시지가 늦게 커밋돼도 폴링에서 빠지지 않는지,
+ * 저장 도중에 여행을 지워도 외래키 오류 없이 지워지는지.
  * 요청마다 트랜잭션이 따로 열려야 해서 테스트 트랜잭션 없이 돌리고, 끝에 여행째 지운다. MySQL이 필요하다.
  */
 @SpringBootTest
-class ChatPollingOrderTest {
+class ChatConcurrencyTest {
 
     private static final LocalDate START = LocalDate.of(2026, 12, 10);
 
@@ -57,7 +58,9 @@ class ChatPollingOrderTest {
 
     @AfterEach
     void tearDown() {
-        tripDeleteService.deleteTrip(owner.getId(), trip.getId());
+        if (trips.existsById(trip.getId())) {
+            tripDeleteService.deleteTrip(owner.getId(), trip.getId());
+        }
         users.deleteAll(created);
     }
 
@@ -88,6 +91,28 @@ class ChatPollingOrderTest {
         List<String> seen = new ArrayList<>(firstPoll.stream().map(ChatMessageResponse::text).toList());
         seen.addAll(poll(cursor).stream().map(ChatMessageResponse::text).toList());
         assertThat(seen).containsExactly("먼저 시작한 메시지", "나중에 보낸 메시지");
+    }
+
+    @Test
+    void 메시지를_저장하는_도중에_여행을_지워도_외래키_오류_없이_지워진다() throws Exception {
+        CountDownLatch inserted = new CountDownLatch(1);
+        CountDownLatch commit = new CountDownLatch(1);
+        // 1) 메시지 저장이 시작되고, 커밋하지 않은 채 멈춘다
+        CompletableFuture<Void> sending = CompletableFuture.runAsync(() -> transactions.executeWithoutResult(status -> {
+            chatMessageService.send(member.getId(), trip.getId(), "지우는 중에 보낸 메시지");
+            inserted.countDown();
+            await(commit);
+        }));
+        await(inserted);
+        // 2) 그사이 방장이 여행을 지운다 (고치기 전에는 메시지를 못 보고 정리한 뒤 여행 삭제에서 외래키 오류)
+        CompletableFuture<Void> deleting = CompletableFuture.runAsync(
+                () -> tripDeleteService.deleteTrip(owner.getId(), trip.getId()));
+        Thread.sleep(300);
+
+        commit.countDown();
+        sending.get(10, TimeUnit.SECONDS);
+        deleting.get(10, TimeUnit.SECONDS);
+        assertThat(trips.existsById(trip.getId())).isFalse();
     }
 
     private List<ChatMessageResponse> poll(Long after) {
