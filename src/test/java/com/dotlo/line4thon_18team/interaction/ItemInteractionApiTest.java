@@ -11,6 +11,9 @@ import com.dotlo.line4thon_18team.itinerary.version.entity.ItinerarySource;
 import com.dotlo.line4thon_18team.itinerary.version.service.ItineraryService;
 import com.dotlo.line4thon_18team.member.entity.TripMember;
 import com.dotlo.line4thon_18team.member.repository.TripMemberRepository;
+import com.dotlo.line4thon_18team.notification.entity.Notification;
+import com.dotlo.line4thon_18team.notification.entity.NotificationType;
+import com.dotlo.line4thon_18team.notification.repository.NotificationRepository;
 import com.dotlo.line4thon_18team.trip.entity.Companion;
 import com.dotlo.line4thon_18team.trip.entity.Trip;
 import com.dotlo.line4thon_18team.trip.repository.TripRepository;
@@ -60,6 +63,7 @@ class ItemInteractionApiTest {
     @Autowired ItemLikeRepository itemLikes;
     @Autowired ItemCommentRepository comments;
     @Autowired CommentLikeRepository commentLikes;
+    @Autowired NotificationRepository notifications;
 
     private User owner;
     private User member;
@@ -220,6 +224,33 @@ class ItemInteractionApiTest {
         assertThat(commentLikes.findAllByCommentTripId(trip.getId())).isEmpty();
     }
 
+    @Test
+    void 댓글에서_부른_일행에게만_멘션_알림이_간다() throws Exception {
+        User outsider = users.save(newUser(5));
+        comment(member.getId(), A, "@" + owner.getNickname() + " @" + outsider.getNickname() + " @"
+                + member.getNickname() + " 여기 가요", null);
+
+        List<Notification> received = notifications.findTop50ByUserIdOrderByIdDesc(owner.getId());
+        assertThat(received).hasSize(1);
+        assertThat(received.get(0).getType()).isEqualTo(NotificationType.COMMENT_MENTION);
+        assertThat(received.get(0).getMessage()).startsWith(member.getNickname() + "님이 나를 멘션했어요 \"@");
+        assertThat(notifications.findTop50ByUserIdOrderByIdDesc(outsider.getId())).isEmpty();   // 일행 아님
+        assertThat(notifications.findTop50ByUserIdOrderByIdDesc(member.getId())).isEmpty();     // 나 자신
+    }
+
+    @Test
+    void 긴_닉네임을_짧은_닉네임으로_잘못_잡지_않는다() throws Exception {
+        User shortName = users.save(namedUser("s" + UUID.randomUUID().toString().substring(0, 6)));
+        User longName = users.save(namedUser(shortName.getNickname() + "z"));
+        members.save(TripMember.create(trip, shortName));
+        members.save(TripMember.create(trip, longName));
+
+        comment(owner.getId(), A, "@" + longName.getNickname() + " 같이 가요", null);
+
+        assertThat(notifications.findTop50ByUserIdOrderByIdDesc(longName.getId())).hasSize(1);
+        assertThat(notifications.findTop50ByUserIdOrderByIdDesc(shortName.getId())).isEmpty();
+    }
+
     private void saveItinerary(String... itemIds) {
         VisitDraft[] visits = new VisitDraft[itemIds.length];
         for (int i = 0; i < itemIds.length; i++) {
@@ -247,6 +278,13 @@ class ItemInteractionApiTest {
 
     private ResultActions perform(MockHttpServletRequestBuilder request, Long userId) throws Exception {
         return mvc.perform(request.header("X-User-Id", userId));
+    }
+
+    private static User namedUser(String nickname) {
+        String id = UUID.randomUUID().toString().substring(0, 8);
+        User user = User.builder().googleSub("sub-ia-" + id).email(id + "@test.com").name("구글이름").build();
+        user.completeSignup(nickname, 1, false, LocalDateTime.now());
+        return user;
     }
 
     private static User newUser(int characterId) {
