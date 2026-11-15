@@ -251,6 +251,20 @@ class ItemInteractionApiTest {
         assertThat(notifications.findTop50ByUserIdOrderByIdDesc(shortName.getId())).isEmpty();
     }
 
+    @Test
+    void 골뱅이_뒤_닉네임이_일행과_정확히_같을_때만_알린다() throws Exception {
+        User shortName = users.save(namedUser("s" + UUID.randomUUID().toString().substring(0, 6)));
+        members.save(TripMember.create(trip, shortName));
+
+        // "@민규야" 처럼 더 긴 닉네임은 일행이 아니어서 알리지 않는다
+        comment(owner.getId(), A, "@" + shortName.getNickname() + "z 같이 가", null);
+        assertThat(notifications.findTop50ByUserIdOrderByIdDesc(shortName.getId())).isEmpty();
+
+        // 닉네임 뒤에 닉네임에 못 쓰는 글자(공백·문장부호)가 오면 거기서 끊는다
+        comment(owner.getId(), A, "@" + shortName.getNickname() + ", 같이 가", null);
+        assertThat(notifications.findTop50ByUserIdOrderByIdDesc(shortName.getId())).hasSize(1);
+    }
+
     private void saveItinerary(String... itemIds) {
         VisitDraft[] visits = new VisitDraft[itemIds.length];
         for (int i = 0; i < itemIds.length; i++) {

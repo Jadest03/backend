@@ -28,11 +28,11 @@ import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 /**
@@ -48,6 +48,9 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 @Transactional(readOnly = true)
 public class ItemInteractionService {
+
+    // "@" 뒤 닉네임. 닉네임에 쓸 수 있는 글자(UserService 의 닉네임 규칙)가 끊기는 곳까지 읽는다
+    private static final Pattern MENTION = Pattern.compile("@([가-힣ㄱ-ㅎㅏ-ㅣa-zA-Z0-9]+)");
 
     private final TripService tripService;
     private final TripRepository tripRepository;
@@ -97,29 +100,22 @@ public class ItemInteractionService {
 
     /**
      * 본문에 "@닉네임"으로 부른 일행에게 알린다 (나 자신은 빼고). FE 가 "@이지우 "처럼 넣는다.
-     * 긴 닉네임부터 찾아 지워 가서, "@민규짱"을 "@민규"로 잘못 잡지 않는다.
+     * "@" 뒤 닉네임에 쓸 수 있는 글자가 끊기는 곳까지를 읽어서, 일행 닉네임과 정확히 같을 때만 알린다
+     * ("@민규야"는 "민규"가 아니라 "민규야"로 읽는다).
      */
     private void notifyMentioned(Trip trip, Long authorId, String content) {
-        if (!content.contains("@")) {
+        Set<String> tags = MENTION.matcher(content).results()
+                .map(match -> match.group(1))
+                .collect(Collectors.toSet());
+        if (tags.isEmpty()) {
             return;
         }
         List<User> people = new ArrayList<>();
         people.add(trip.getUser());
         tripMembers.findAllByTripIdOrderByIdAsc(trip.getId()).forEach(member -> people.add(member.getUser()));
-        people.removeIf(person -> person.getNickname() == null);
-        people.sort(Comparator.comparingInt((User person) -> person.getNickname().length()).reversed());
-
-        String rest = content;
-        List<User> mentioned = new ArrayList<>();
-        for (User person : people) {
-            String tag = "@" + person.getNickname();
-            if (rest.contains(tag)) {
-                rest = rest.replace(tag, " ");
-                if (!person.getId().equals(authorId)) {
-                    mentioned.add(person);
-                }
-            }
-        }
+        List<User> mentioned = people.stream()
+                .filter(person -> tags.contains(person.getNickname()) && !person.getId().equals(authorId))
+                .toList();
         if (mentioned.isEmpty()) {
             return;
         }
