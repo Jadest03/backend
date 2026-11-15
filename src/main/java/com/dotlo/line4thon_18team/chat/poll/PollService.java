@@ -2,6 +2,7 @@ package com.dotlo.line4thon_18team.chat.poll;
 
 import com.dotlo.line4thon_18team.chat.poll.dto.NewCandidate;
 import com.dotlo.line4thon_18team.chat.poll.dto.PollView;
+import com.dotlo.line4thon_18team.chat.poll.entity.PollStatus;
 import com.dotlo.line4thon_18team.chat.poll.entity.TripPoll;
 import com.dotlo.line4thon_18team.chat.poll.entity.TripPollCandidate;
 import com.dotlo.line4thon_18team.chat.poll.entity.TripPollVote;
@@ -17,6 +18,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Limit;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Isolation;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.ArrayList;
@@ -99,6 +101,30 @@ public class PollService {
             poll.close();
         }
         return view(poll, votes, memberIds.size());
+    }
+
+    /** 여행 행을 잠근 나가기 트랜잭션에서 구성원을 갱신한 뒤 호출한다. */
+    @Transactional(propagation = Propagation.MANDATORY)
+    public void closeCompletedPolls(Trip trip) {
+        List<TripPoll> openPolls = pollRepository.findByTripIdAndStatus(trip.getId(), PollStatus.OPEN);
+        if (openPolls.isEmpty()) {
+            return;
+        }
+
+        Set<Long> memberIds = currentMemberIds(trip);
+        List<Long> pollIds = openPolls.stream().map(TripPoll::getId).toList();
+        Map<Long, Long> voteCounts = new LinkedHashMap<>();
+        for (TripPollVote vote : voteRepository.findByPollIdInOrderByIdAsc(pollIds)) {
+            if (memberIds.contains(vote.getUserId())) {
+                voteCounts.merge(vote.getPoll().getId(), 1L, Long::sum);
+            }
+        }
+
+        for (TripPoll poll : openPolls) {
+            if (voteCounts.getOrDefault(poll.getId(), 0L) == memberIds.size()) {
+                poll.close();
+            }
+        }
     }
 
     /** 채팅 메시지 조회(BE2)가 함께 내려줄 최근 투표 상태. */

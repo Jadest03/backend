@@ -16,6 +16,8 @@ import com.dotlo.line4thon_18team.user.entity.User;
 import com.dotlo.line4thon_18team.user.repository.UserRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
@@ -31,6 +33,7 @@ import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -153,6 +156,38 @@ class ChatPollApiTest {
                 .andExpect(jsonPath("$[0].pollId").value(second.pollId()))
                 .andExpect(jsonPath("$[1].pollId").value(first.pollId()))
                 .andExpect(jsonPath("$[0].totalMembers").value(2));
+    }
+
+    @ParameterizedTest
+    @ValueSource(booleans = {false, true})
+    void 미투표자가_나가면_남은_구성원이_모두_투표한_투표를_마감한다(boolean ownerLeaves) throws Exception {
+        User thirdMember = newUser("새 동행자");
+        tripMembers.save(TripMember.create(trip, thirdMember));
+        PollView poll = givenPoll();
+        long candidateId = poll.candidates().get(0).id();
+        Long departingUser = ownerLeaves ? owner : companion;
+        Long remainingUser = ownerLeaves ? companion : owner;
+
+        vote(remainingUser, poll.pollId(), candidateId).andExpect(status().isOk());
+        vote(thirdMember.getId(), poll.pollId(), candidateId)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("OPEN"))
+                .andExpect(jsonPath("$.votedCount").value(2))
+                .andExpect(jsonPath("$.totalMembers").value(3));
+
+        mvc.perform(delete("/api/trips/{tripId}/members/me", trip.getId()).header("X-User-Id", departingUser))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.tripDeleted").value(false));
+
+        mvc.perform(get("/api/trips/{tripId}/chat/polls", trip.getId()).header("X-User-Id", remainingUser))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].status").value("CLOSED"))
+                .andExpect(jsonPath("$[0].votedCount").value(2))
+                .andExpect(jsonPath("$[0].totalMembers").value(2));
+
+        vote(remainingUser, poll.pollId(), poll.candidates().get(1).id())
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("POLL_CLOSED"));
     }
 
     @Test

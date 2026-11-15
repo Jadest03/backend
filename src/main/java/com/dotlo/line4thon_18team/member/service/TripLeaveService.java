@@ -1,5 +1,6 @@
 package com.dotlo.line4thon_18team.member.service;
 
+import com.dotlo.line4thon_18team.chat.poll.PollService;
 import com.dotlo.line4thon_18team.global.error.BusinessException;
 import com.dotlo.line4thon_18team.global.error.ErrorCode;
 import com.dotlo.line4thon_18team.member.entity.TripMember;
@@ -30,6 +31,7 @@ public class TripLeaveService {
     private final TripMemberRepository tripMemberRepository;
     private final TripDeleteService tripDeleteService;
     private final NotificationRepository notificationRepository;
+    private final PollService pollService;
 
     /**
      * 초대 수락과 같은 여행 행을 잠가서, 나가는 사이에 누가 들어오거나 방장이 바뀌는 일이 겹치지 않게 한다.
@@ -48,16 +50,17 @@ public class TripLeaveService {
 
         if (!trip.getUser().getId().equals(userId)) {
             tripMemberRepository.findByTripIdAndUserId(tripId, userId).ifPresent(tripMemberRepository::delete);
-            return false;
+        } else {
+            Optional<TripMember> next = tripMemberRepository.findFirstByTripIdOrderByIdAsc(tripId);
+            if (next.isEmpty()) {
+                tripDeleteService.delete(trip);
+                return true;
+            }
+            trip.changeOwner(next.get().getUser());
+            tripMemberRepository.delete(next.get());   // 방장은 trip_member 에 두지 않는다
         }
 
-        Optional<TripMember> next = tripMemberRepository.findFirstByTripIdOrderByIdAsc(tripId);
-        if (next.isEmpty()) {
-            tripDeleteService.delete(trip);
-            return true;
-        }
-        trip.changeOwner(next.get().getUser());
-        tripMemberRepository.delete(next.get());   // 방장은 trip_member 에 두지 않는다
+        pollService.closeCompletedPolls(trip);
         return false;
     }
 }
