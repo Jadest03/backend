@@ -1,7 +1,5 @@
 package com.dotlo.line4thon_18team.itinerary;
 
-import com.dotlo.line4thon_18team.itinerary.validation.TravelEstimator;
-import com.dotlo.line4thon_18team.itinerary.validation.ValidationPolicy;
 import com.dotlo.line4thon_18team.itinerary.validation.model.GeoPoint;
 import com.dotlo.line4thon_18team.itinerary.validation.model.TravelMode;
 import com.dotlo.line4thon_18team.itinerary.validation.port.TravelLookup;
@@ -24,8 +22,8 @@ class PlaceTravelTimeProviderTest {
 
     @Test
     void BE2가_고른_수단과_시간을_그대로_넘긴다() {
-        StubTravelTime be2 = new StubTravelTime(new TravelTime.Leg(12, TravelTime.Mode.WALK, false));
-        PlaceTravelTimeProvider provider = new PlaceTravelTimeProvider(be2, ValidationPolicy.defaults());
+        StubTravelTime be2 = new StubTravelTime(new TravelTime.Leg(12, TravelTime.Mode.WALK, false, 1500));
+        PlaceTravelTimeProvider provider = new PlaceTravelTimeProvider(be2);
 
         TravelLookup lookup = provider.lookup(new TravelQuery(NAMBA, OSAKA_CASTLE, TravelMode.TRANSIT, DEPART));
 
@@ -40,8 +38,8 @@ class PlaceTravelTimeProviderTest {
 
     @Test
     void BE2_추정치는_추정으로_넘긴다() {
-        StubTravelTime be2 = new StubTravelTime(new TravelTime.Leg(35, TravelTime.Mode.TRANSIT, true));
-        PlaceTravelTimeProvider provider = new PlaceTravelTimeProvider(be2, ValidationPolicy.defaults());
+        StubTravelTime be2 = new StubTravelTime(new TravelTime.Leg(35, TravelTime.Mode.TRANSIT, true, 1500));
+        PlaceTravelTimeProvider provider = new PlaceTravelTimeProvider(be2);
 
         TravelLookup lookup = provider.lookup(new TravelQuery(NAMBA, OSAKA_CASTLE, TravelMode.TRANSIT, DEPART));
 
@@ -52,21 +50,39 @@ class PlaceTravelTimeProviderTest {
     }
 
     @Test
-    void 거리는_직선거리에_우회_계수를_곱해서_채운다() {
-        StubTravelTime be2 = new StubTravelTime(new TravelTime.Leg(20, TravelTime.Mode.TRANSIT, false));
-        PlaceTravelTimeProvider provider = new PlaceTravelTimeProvider(be2, ValidationPolicy.defaults());
-        int expected = new TravelEstimator(ValidationPolicy.defaults())
-                .estimateDistanceMeters(TravelEstimator.straightLineMeters(NAMBA, OSAKA_CASTLE));
+    void 거리는_BE2가_준_경로_거리를_그대로_쓴다() {
+        StubTravelTime be2 = new StubTravelTime(new TravelTime.Leg(20, TravelTime.Mode.TRANSIT, false, 4321));
+        PlaceTravelTimeProvider provider = new PlaceTravelTimeProvider(be2);
 
         TravelLookup lookup = provider.lookup(new TravelQuery(NAMBA, OSAKA_CASTLE, TravelMode.TRANSIT, DEPART));
 
-        assertThat(lookup.distanceMeters()).isEqualTo(expected).isGreaterThan(0);
+        assertThat(lookup.distanceMeters()).isEqualTo(4321);
+    }
+
+    @Test
+    void 사용자가_고른_수단은_그_수단으로만_조회한다() {
+        StubTravelTime be2 = new StubTravelTime(new TravelTime.Leg(40, TravelTime.Mode.WALK, false, 3000));
+        PlaceTravelTimeProvider provider = new PlaceTravelTimeProvider(be2);
+
+        provider.lookup(new TravelQuery(NAMBA, OSAKA_CASTLE, TravelMode.WALK, DEPART, true));
+        assertThat(be2.calls).containsExactly("walk");
+
+        provider.lookup(new TravelQuery(NAMBA, OSAKA_CASTLE, TravelMode.TRANSIT, DEPART, true));
+        assertThat(be2.calls).containsExactly("walk", "transit");
+        assertThat(be2.departure).isEqualTo(DEPART.toInstant());
+
+        provider.lookup(new TravelQuery(NAMBA, OSAKA_CASTLE, TravelMode.DRIVE, DEPART, true));
+        assertThat(be2.calls).containsExactly("walk", "transit", "drive");
+
+        // 고르지 않았으면 BE2가 도보·대중교통 중에서 고른다
+        provider.lookup(new TravelQuery(NAMBA, OSAKA_CASTLE, TravelMode.WALK, DEPART));
+        assertThat(be2.calls).containsExactly("walk", "transit", "drive", "get");
     }
 
     @Test
     void 운전을_물으면_자동차_경로를_쓴다() {
-        StubTravelTime be2 = new StubTravelTime(new TravelTime.Leg(18, TravelTime.Mode.DRIVE, false));
-        PlaceTravelTimeProvider provider = new PlaceTravelTimeProvider(be2, ValidationPolicy.defaults());
+        StubTravelTime be2 = new StubTravelTime(new TravelTime.Leg(18, TravelTime.Mode.DRIVE, false, 1500));
+        PlaceTravelTimeProvider provider = new PlaceTravelTimeProvider(be2);
 
         TravelLookup lookup = provider.lookup(new TravelQuery(NAMBA, OSAKA_CASTLE, TravelMode.DRIVE, DEPART));
 
@@ -78,8 +94,8 @@ class PlaceTravelTimeProviderTest {
 
     @Test
     void 운전이_아니면_자동차_경로를_부르지_않는다() {
-        StubTravelTime be2 = new StubTravelTime(new TravelTime.Leg(12, TravelTime.Mode.TRANSIT, false));
-        PlaceTravelTimeProvider provider = new PlaceTravelTimeProvider(be2, ValidationPolicy.defaults());
+        StubTravelTime be2 = new StubTravelTime(new TravelTime.Leg(12, TravelTime.Mode.TRANSIT, false, 1500));
+        PlaceTravelTimeProvider provider = new PlaceTravelTimeProvider(be2);
 
         provider.lookup(new TravelQuery(NAMBA, OSAKA_CASTLE, TravelMode.TRANSIT, DEPART));
 
@@ -95,6 +111,7 @@ class PlaceTravelTimeProviderTest {
         LatLng to;
         Instant departure;
         int driveCalls;
+        final java.util.List<String> calls = new java.util.ArrayList<>();
 
         StubTravelTime(TravelTime.Leg result) {
             super("");
@@ -103,6 +120,7 @@ class PlaceTravelTimeProviderTest {
 
         @Override
         public TravelTime.Leg get(LatLng from, LatLng to, Instant departure) {
+            calls.add("get");
             this.from = from;
             this.to = to;
             this.departure = departure;
@@ -111,9 +129,23 @@ class PlaceTravelTimeProviderTest {
 
         @Override
         public TravelTime.Leg drive(LatLng from, LatLng to) {
+            calls.add("drive");
             this.from = from;
             this.to = to;
             this.driveCalls++;
+            return result;
+        }
+
+        @Override
+        public TravelTime.Leg walk(LatLng from, LatLng to) {
+            calls.add("walk");
+            return result;
+        }
+
+        @Override
+        public TravelTime.Leg transit(LatLng from, LatLng to, Instant departure) {
+            calls.add("transit");
+            this.departure = departure;
             return result;
         }
     }

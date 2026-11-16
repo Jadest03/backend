@@ -23,8 +23,8 @@ public class ItineraryConfig {
     }
 
     @Bean
-    public TravelTimeProvider travelTimeProvider(TravelTime travelTime, ValidationPolicy validationPolicy) {
-        return new PlaceTravelTimeProvider(travelTime, validationPolicy);
+    public TravelTimeProvider travelTimeProvider(TravelTime travelTime) {
+        return new PlaceTravelTimeProvider(travelTime);
     }
 
     @Bean

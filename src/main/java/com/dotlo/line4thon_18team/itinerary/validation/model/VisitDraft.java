@@ -10,8 +10,10 @@ import java.time.LocalTime;
  * @param placeId     장소 ID (Places API place ID)
  * @param stayMinutes 체류시간(분). null이면 장소 유형과 일정 강도로 기본값을 쓴다.
  * @param fixedStart  예약 등으로 시작 시각이 정해진 경우. null이면 도착하는 대로(영업 시작 후) 시작한다.
+ * @param travelMode  이 장소까지 오는 구간의 수단 (사용자가 고른 값). null이면 검증기가 거리로 정한다.
  */
-public record VisitDraft(String itemId, String placeId, Integer stayMinutes, LocalTime fixedStart) {
+public record VisitDraft(String itemId, String placeId, Integer stayMinutes, LocalTime fixedStart,
+                         TravelMode travelMode) {
 
     public VisitDraft {
         if (itemId == null || itemId.isBlank()) {
@@ -25,15 +27,20 @@ public record VisitDraft(String itemId, String placeId, Integer stayMinutes, Loc
         }
     }
 
+    /** 수단을 고르지 않은 방문. */
+    public VisitDraft(String itemId, String placeId, Integer stayMinutes, LocalTime fixedStart) {
+        this(itemId, placeId, stayMinutes, fixedStart, null);
+    }
+
     public static VisitDraft of(String itemId, String placeId) {
         return new VisitDraft(itemId, placeId, null, null);
     }
 
     public VisitDraft withStayMinutes(int minutes) {
-        return new VisitDraft(itemId, placeId, minutes, fixedStart);
+        return new VisitDraft(itemId, placeId, minutes, fixedStart, travelMode);
     }
 
     public VisitDraft withFixedStart(LocalTime time) {
-        return new VisitDraft(itemId, placeId, stayMinutes, time);
+        return new VisitDraft(itemId, placeId, stayMinutes, time, travelMode);
     }
 }

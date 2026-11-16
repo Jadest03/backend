@@ -7,6 +7,7 @@ import com.dotlo.line4thon_18team.place.TravelTime.Leg;
 import com.dotlo.line4thon_18team.place.TravelTime.Mode;
 import com.dotlo.line4thon_18team.place.TravelTime.Route;
 import java.time.Instant;
+import java.util.List;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
 import org.junit.jupiter.api.Test;
@@ -20,24 +21,35 @@ class TravelTimeTest {
 
     @Test
     void 시간_변환() {
-        assertEquals(52, TravelTime.minutes(new Route("3061s", null)));  // 51분 1초 → 52분
-        assertEquals(1, TravelTime.minutes(new Route("60s", null)));
+        assertEquals(52, TravelTime.minutes(new Route("3061s", null, null)));  // 51분 1초 → 52분
+        assertEquals(1, TravelTime.minutes(new Route("60s", null, null)));
     }
 
     @Test
     void 직선거리_추정() {
         Leg near = TravelTime.straightLine(미도스지점, 글리코사인);
-        assertEquals(new Leg(2, Mode.WALK, true), near);
+        assertEquals(new Leg(2, Mode.WALK, true, road(미도스지점, 글리코사인)), near);
         Leg far = TravelTime.straightLine(미도스지점, 하루카스);  // 직선 약 2.8km
-        assertEquals(Mode.TRANSIT, far.mode());
-        assertTrue(far.estimated());
-        assertEquals(23, far.minutes());
+        assertEquals(new Leg(23, Mode.TRANSIT, true, road(미도스지점, 하루카스)), far);
     }
 
     @Test
     void 자동차_직선거리_추정() {
         // 직선 약 2.8km × 1.3 ÷ 분당 500m → 8분
-        assertEquals(new Leg(8, Mode.DRIVE, true), TravelTime.straightLineDrive(미도스지점, 하루카스));
+        assertEquals(new Leg(8, Mode.DRIVE, true, road(미도스지점, 하루카스)), TravelTime.straightLineDrive(미도스지점, 하루카스));
+    }
+
+    @Test
+    void 고른_수단의_직선거리_추정은_수단을_바꾸지_않는다() {
+        // 약 3.6km 도보 → 46분이어도 도보, 200m 대중교통 → 대중교통 추정 (10분 대기 포함)
+        assertEquals(Mode.WALK, TravelTime.straightLineWalk(미도스지점, 하루카스).mode());
+        assertEquals(46, TravelTime.straightLineWalk(미도스지점, 하루카스).minutes());
+        assertEquals(new Leg(11, Mode.TRANSIT, true, road(미도스지점, 글리코사인)), TravelTime.straightLineTransit(미도스지점, 글리코사인));
+    }
+
+    // 직선거리 × 1.3
+    private static int road(LatLng from, LatLng to) {
+        return (int) Math.round(PlaceMatcher.meters(from.lat(), from.lng(), to.lat(), to.lng()) * 1.3);
     }
 
     @Test
@@ -90,7 +102,27 @@ class TravelTimeTest {
         assertFalse(car.estimated());
         assertEquals(far.minutes() - 10, car.minutes());
 
+        // 경로 거리: 도보·자동차 모두 직선거리(약 2.8km)보다 길고, 대중교통 추정은 자동차 길 거리
+        assertTrue(near.distanceMeters() > 0);
+        assertEquals(car.distanceMeters(), far.distanceMeters());
+        assertTrue(car.distanceMeters() > 2800 && car.distanceMeters() < 8000, "자동차 m: " + car.distanceMeters());
+
+        // 사용자가 고른 수단: 먼 곳도 도보, 가까운 곳도 대중교통(일본은 자동차 + 10분 추정)
+        Leg longWalk = service.walk(미도스지점, 하루카스);
+        assertEquals(Mode.WALK, longWalk.mode());
+        assertFalse(longWalk.estimated());
+        assertTrue(longWalk.minutes() > 20, "도보 분: " + longWalk.minutes());
+        Leg shortTransit = service.transit(미도스지점, 글리코사인, noonKst);
+        assertEquals(Mode.TRANSIT, shortTransit.mode());
+        assertTrue(shortTransit.estimated());
+
+        // 이동 수단 선택 시트: 도보·대중교통·자동차 순서
+        List<Leg> options = service.options(미도스지점, 하루카스, noonKst);
+        assertEquals(List.of(Mode.WALK, Mode.TRANSIT, Mode.DRIVE), options.stream().map(Leg::mode).toList());
+        assertEquals(far, options.get(1));
+        assertEquals(car, options.get(2));
+
         System.out.println("도보: " + near + " / 오사카 추정: " + far + " / 서울: " + seoul + " / 방콕 130일 뒤: " + bangkok
-                + " / 오사카 자동차: " + car);
+                + " / 오사카 자동차: " + car + " / 먼 도보: " + longWalk + " / 가까운 대중교통: " + shortTransit);
     }
 }

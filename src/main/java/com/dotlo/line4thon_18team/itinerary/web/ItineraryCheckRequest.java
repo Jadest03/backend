@@ -2,6 +2,7 @@ package com.dotlo.line4thon_18team.itinerary.web;
 
 import com.dotlo.line4thon_18team.itinerary.validation.model.DayDraft;
 import com.dotlo.line4thon_18team.itinerary.validation.model.ItineraryDraft;
+import com.dotlo.line4thon_18team.itinerary.validation.model.TravelMode;
 import com.dotlo.line4thon_18team.itinerary.validation.model.ValidationOrigin;
 import com.dotlo.line4thon_18team.itinerary.validation.model.VisitDraft;
 import jakarta.validation.Valid;
@@ -32,6 +33,7 @@ public record ItineraryCheckRequest(
     /**
      * @param stayMinutes 체류시간(분). 없으면 장소 유형과 일정 강도로 기본값을 쓴다.
      * @param fixedStart  예약 등으로 시작 시각이 정해진 경우 ("HH:mm")
+     * @param travelMode  이 장소까지 오는 구간의 수단 (WALK, TRANSIT, DRIVE). 없으면 자동
      */
     public record Visit(
 
@@ -45,7 +47,9 @@ public record ItineraryCheckRequest(
             @Max(value = 720, message = "stayMinutes는 720분 이하여야 합니다.")
             Integer stayMinutes,
 
-            LocalTime fixedStart
+            LocalTime fixedStart,
+
+            TravelMode travelMode
     ) {
     }
 
@@ -65,7 +69,7 @@ public record ItineraryCheckRequest(
 
     private static DayDraft toDayDraft(Day day) {
         return new DayDraft(day.date(), day.visits().stream()
-                .map(v -> new VisitDraft(v.itemId(), v.placeId(), v.stayMinutes(), v.fixedStart()))
+                .map(v -> new VisitDraft(v.itemId(), v.placeId(), v.stayMinutes(), v.fixedStart(), v.travelMode()))
                 .toList());
     }
 }

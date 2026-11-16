@@ -37,6 +37,7 @@ import static org.hamcrest.Matchers.startsWith;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.doAnswer;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -98,6 +99,30 @@ class ItineraryManualSaveTest {
                 .andExpect(jsonPath("$.draft.days[0].visits[0].itemId").value("v-keep0001"))
                 .andExpect(jsonPath("$.draft.days[0].visits[1].itemId").value(startsWith("v-")))
                 .andExpect(jsonPath("$.validation.days[0].visits.length()").value(2));
+    }
+
+    @Test
+    void 고른_이동_수단은_저장되고_다시_조회해도_남는다() throws Exception {
+        save(owner, """
+                {"days": [{"date": "2026-11-20",
+                           "visits": [{"itemId": "v-walk0001", "placeId": "ChIJ-a", "travelMode": "WALK"},
+                                      {"itemId": "v-auto0001", "placeId": "ChIJ-b"}]}]}""")
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.draft.days[0].visits[0].travelMode").value("WALK"))
+                .andExpect(jsonPath("$.draft.days[0].visits[1].travelMode").doesNotExist());
+
+        mvc.perform(get("/api/trips/{tripId}/itineraries/latest", trip.getId()).header("X-User-Id", owner.getId()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.draft.days[0].visits[0].travelMode").value("WALK"))
+                .andExpect(jsonPath("$.draft.days[0].visits[1].travelMode").doesNotExist());
+    }
+
+    @Test
+    void 없는_이동_수단이면_400() throws Exception {
+        save(owner, """
+                {"days": [{"date": "2026-11-20", "visits": [{"placeId": "ChIJ-a", "travelMode": "BIKE"}]}]}""")
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("INVALID_REQUEST_BODY"));
     }
 
     @Test

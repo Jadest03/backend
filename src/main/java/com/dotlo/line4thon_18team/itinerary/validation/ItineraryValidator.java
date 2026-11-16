@@ -202,7 +202,8 @@ public final class ItineraryValidator {
     }
 
     /**
-     * 이동 구간 계산. 직선거리가 도보 기준 이하면 도보, 넘으면 대중교통으로 조회한다.
+     * 이동 구간 계산. 사용자가 이 장소까지의 수단을 골랐으면 그 수단으로, 아니면 직선거리가 도보 기준 이하면 도보,
+     * 넘으면 대중교통으로 조회한다.
      * 이동시간 함수가 수단을 직접 고르면(BE2) 그 수단을 따르고, 추정치를 주면 '추정'으로 표시한다.
      * issues가 null이면(숙소 복귀 구간) 문제를 기록하지 않는다.
      */
@@ -217,10 +218,11 @@ public final class ItineraryValidator {
         }
         // 렌터카를 빌린 날이라도 걸어갈 거리는 걷는다. 차를 쓰는 건 걷기 기준을 넘는 구간뿐이다
         TravelMode longLeg = trip.drivingOn(date) ? TravelMode.DRIVE : TravelMode.TRANSIT;
-        TravelMode mode = straight <= policy.walkThresholdMeters(preferences.walking())
-                ? TravelMode.WALK : longLeg;
+        TravelMode chosen = visit == null ? null : visit.travelMode();
+        TravelMode mode = chosen != null ? chosen
+                : straight <= policy.walkThresholdMeters(preferences.walking()) ? TravelMode.WALK : longLeg;
         TravelLookup lookup = TravelLookups.safe(travel,
-                new TravelQuery(from, to, mode, departAt.atZone(trip.zone())));
+                new TravelQuery(from, to, mode, departAt.atZone(trip.zone()), chosen != null));
         if (lookup.status() == TravelLookup.Status.OK) {
             TravelMode actual = lookup.mode() != null ? lookup.mode() : mode;
             if (!lookup.estimated()) {

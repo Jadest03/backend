@@ -23,19 +23,21 @@ public class TravelTime {
     public enum Mode { WALK, TRANSIT, DRIVE }
 
     /*
-    - estimated: true면 실제 경로가 아닌 추정치입니다. 화면에 '추정'으로 표시합니다.
+    - estimated: true면 실제 경로가 아닌 추정치입니다. 화면에 '추정'(예상 시간)으로 표시합니다.
       일본처럼 API에 대중교통 경로가 없는 곳, API 오류일 때 true.
+    - distanceMeters: 경로 거리. 대중교통 추정(자동차 시간 + 10분)은 자동차 길 거리, 직선거리 추정은 직선거리 × 1.3.
     */
-    public record Leg(int minutes, Mode mode, boolean estimated) {}
+    public record Leg(int minutes, Mode mode, boolean estimated, int distanceMeters) {}
 
     // Routes API 응답 중 필요한 필드만
     record RoutesResponse(List<Route> routes) {}
-    record Route(String duration, List<RouteLeg> legs) {}  // duration: "3061s"
+    record Route(String duration, Integer distanceMeters, List<RouteLeg> legs) {}  // duration: "3061s". 거리 0이면 빠짐
     record RouteLeg(List<Step> steps) {}
     record Step(String travelMode) {}
 
     private static final String ROUTES_URL = "https://routes.googleapis.com/directions/v2:computeRoutes";
-    private static final String FIELD_MASK = "routes.duration,routes.legs.steps.travelMode";
+    // 요금은 요청 기능(교통정보 반영 등)으로 정해지고 받는 필드와는 상관없음 (2026-11-16 SKU 문서 확인)
+    private static final String FIELD_MASK = "routes.duration,routes.distanceMeters,routes.legs.steps.travelMode";
     private static final int WALK_MAX_MIN = 20;
     private static final int TRANSIT_EXTRA_MIN = 10;  // 자동차 시간 → 대중교통 추정: 역까지 걷기, 기다리기
     private static final int TRANSIT_SCHEDULE_DAYS = 90;  // 이보다 먼 출발은 가까운 날짜로 바꿔 조회
@@ -58,18 +60,68 @@ public class TravelTime {
     public Leg get(LatLng from, LatLng to, Instant departure) {
         try {
             Route transit = route(from, to, "TRANSIT", transitDeparture(departure, Instant.now()));
-            if (transit != null && hasTransitStep(transit)) return new Leg(minutes(transit), Mode.TRANSIT, false);
+            if (transit != null && hasTransitStep(transit)) return leg(transit, Mode.TRANSIT);
 
             // 대중교통 경로가 걷기뿐이면 그 시간이 도보 시간과 같음 (2026-11-01 오사카에서 확인). 경로가 없으면 도보로 다시 조회.
             Route walk = transit != null ? transit : route(from, to, "WALK", null);
-            if (walk != null && minutes(walk) <= WALK_MAX_MIN) return new Leg(minutes(walk), Mode.WALK, false);
+            if (walk != null && minutes(walk) <= WALK_MAX_MIN) return leg(walk, Mode.WALK);
 
             Route drive = route(from, to, "DRIVE", null);
-            if (drive != null) return new Leg(minutes(drive) + TRANSIT_EXTRA_MIN, Mode.TRANSIT, true);
+            if (drive != null) return transitByDrive(drive);
         } catch (RestClientException e) {
             log.warn("Routes API 오류, 직선거리로 추정: {}", e.getMessage());
         }
         return straightLine(from, to);
+    }
+
+    /*
+    사용자가 도보를 고른 구간: 멀어도 도보 시간.
+    경로 없음·API 오류 → 직선거리로 추정
+    */
+    public Leg walk(LatLng from, LatLng to) {
+        try {
+            Route walk = route(from, to, "WALK", null);
+            if (walk != null) return leg(walk, Mode.WALK);
+        } catch (RestClientException e) {
+            log.warn("Routes API 오류, 직선거리로 추정: {}", e.getMessage());
+        }
+        return straightLineWalk(from, to);
+    }
+
+    /*
+    사용자가 대중교통을 고른 구간: 가까워도 대중교통.
+    대중교통 경로가 없으면(일본 등) 자동차 시간 + 10분 추정, 그것도 없으면 직선거리로 추정
+    */
+    public Leg transit(LatLng from, LatLng to, Instant departure) {
+        try {
+            Route transit = route(from, to, "TRANSIT", transitDeparture(departure, Instant.now()));
+            if (transit != null && hasTransitStep(transit)) return leg(transit, Mode.TRANSIT);
+            Route drive = route(from, to, "DRIVE", null);
+            if (drive != null) return transitByDrive(drive);
+        } catch (RestClientException e) {
+            log.warn("Routes API 오류, 직선거리로 추정: {}", e.getMessage());
+        }
+        return straightLineTransit(from, to);
+    }
+
+    /*
+    구간 이동 수단 선택 화면: 도보·대중교통·자동차 순서로 3개.
+    자동차 경로를 한 번만 불러서 대중교통 추정에도 쓴다 (구글 호출 최대 3번)
+    */
+    public List<Leg> options(LatLng from, LatLng to, Instant departure) {
+        Leg drive = drive(from, to);
+        Leg transit = null;
+        try {
+            Route route = route(from, to, "TRANSIT", transitDeparture(departure, Instant.now()));
+            if (route != null && hasTransitStep(route)) transit = leg(route, Mode.TRANSIT);
+        } catch (RestClientException e) {
+            log.warn("Routes API 오류, 추정: {}", e.getMessage());
+        }
+        if (transit == null) {
+            transit = drive.estimated() ? straightLineTransit(from, to)
+                    : new Leg(drive.minutes() + TRANSIT_EXTRA_MIN, Mode.TRANSIT, true, drive.distanceMeters());
+        }
+        return List.of(walk(from, to), transit, drive);
     }
 
     /*
@@ -79,7 +131,7 @@ public class TravelTime {
     public Leg drive(LatLng from, LatLng to) {
         try {
             Route drive = route(from, to, "DRIVE", null);
-            if (drive != null) return new Leg(minutes(drive), Mode.DRIVE, false);
+            if (drive != null) return leg(drive, Mode.DRIVE);
         } catch (RestClientException e) {
             log.warn("Routes API 오류, 직선거리로 추정: {}", e.getMessage());
         }
@@ -94,18 +146,41 @@ public class TravelTime {
         return departure.minus(weeks * 7, ChronoUnit.DAYS);
     }
 
+    // 실제 경로. 거리는 구글 값
+    private static Leg leg(Route r, Mode mode) {
+        return new Leg(minutes(r), mode, false, r.distanceMeters() == null ? 0 : r.distanceMeters());
+    }
+
+    // 대중교통 경로가 없을 때: 자동차 시간 + 10분, 거리는 자동차 길
+    private static Leg transitByDrive(Route drive) {
+        Leg car = leg(drive, Mode.DRIVE);
+        return new Leg(car.minutes() + TRANSIT_EXTRA_MIN, Mode.TRANSIT, true, car.distanceMeters());
+    }
+
     // ponytail: 굽은 길 1.3배, 도보 분당 80m, 대중교통 분당 300m + 10분. 실제 값과 비교해서 조정.
     static Leg straightLine(LatLng from, LatLng to) {
-        double m = PlaceMatcher.meters(from.lat(), from.lng(), to.lat(), to.lng()) * 1.3;
-        int walk = (int) Math.ceil(m / 80);
-        if (walk <= WALK_MAX_MIN) return new Leg(walk, Mode.WALK, true);
-        return new Leg((int) Math.ceil(m / 300) + TRANSIT_EXTRA_MIN, Mode.TRANSIT, true);
+        Leg walk = straightLineWalk(from, to);
+        return walk.minutes() <= WALK_MAX_MIN ? walk : straightLineTransit(from, to);
+    }
+
+    static Leg straightLineWalk(LatLng from, LatLng to) {
+        double m = roadMeters(from, to);
+        return new Leg((int) Math.ceil(m / 80), Mode.WALK, true, (int) Math.round(m));
+    }
+
+    static Leg straightLineTransit(LatLng from, LatLng to) {
+        double m = roadMeters(from, to);
+        return new Leg((int) Math.ceil(m / 300) + TRANSIT_EXTRA_MIN, Mode.TRANSIT, true, (int) Math.round(m));
     }
 
     // ponytail: 굽은 길 1.3배, 자동차 분당 500m(시내 기준). 실제 값과 비교해서 조정.
     static Leg straightLineDrive(LatLng from, LatLng to) {
-        double m = PlaceMatcher.meters(from.lat(), from.lng(), to.lat(), to.lng()) * 1.3;
-        return new Leg((int) Math.ceil(m / DRIVE_M_PER_MIN), Mode.DRIVE, true);
+        double m = roadMeters(from, to);
+        return new Leg((int) Math.ceil(m / DRIVE_M_PER_MIN), Mode.DRIVE, true, (int) Math.round(m));
+    }
+
+    private static double roadMeters(LatLng from, LatLng to) {
+        return PlaceMatcher.meters(from.lat(), from.lng(), to.lat(), to.lng()) * 1.3;
     }
 
     static int minutes(Route r) {

@@ -3,6 +3,7 @@ package com.dotlo.line4thon_18team.itinerary.version.dto;
 import com.dotlo.line4thon_18team.itinerary.ItineraryItemId;
 import com.dotlo.line4thon_18team.itinerary.validation.model.DayDraft;
 import com.dotlo.line4thon_18team.itinerary.validation.model.ItineraryDraft;
+import com.dotlo.line4thon_18team.itinerary.validation.model.TravelMode;
 import com.dotlo.line4thon_18team.itinerary.validation.model.VisitDraft;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Max;
@@ -33,7 +34,10 @@ public record ItinerarySaveRequest(
     ) {
     }
 
-    /** @param itemId 기존 방문은 그대로, 새 방문은 비워 두면 서버가 만든다 */
+    /**
+     * @param itemId     기존 방문은 그대로, 새 방문은 비워 두면 서버가 만든다
+     * @param travelMode 이 장소까지 오는 구간의 수단 (WALK, TRANSIT, DRIVE). 비우면 자동
+     */
     public record Visit(
             String itemId,
             @NotBlank(message = "placeId는 필수입니다.")
@@ -41,7 +45,8 @@ public record ItinerarySaveRequest(
             @Min(value = 1, message = "stayMinutes는 1~720분이어야 합니다.")
             @Max(value = 720, message = "stayMinutes는 1~720분이어야 합니다.")
             Integer stayMinutes,
-            LocalTime fixedStart
+            LocalTime fixedStart,
+            TravelMode travelMode
     ) {
     }
 
@@ -50,7 +55,7 @@ public record ItinerarySaveRequest(
                 .map(day -> new DayDraft(day.date(), day.visits().stream()
                         .map(visit -> new VisitDraft(
                                 visit.itemId() == null || visit.itemId().isBlank() ? ItineraryItemId.newId() : visit.itemId(),
-                                visit.placeId(), visit.stayMinutes(), visit.fixedStart()))
+                                visit.placeId(), visit.stayMinutes(), visit.fixedStart(), visit.travelMode()))
                         .toList()))
                 .toList());
     }
