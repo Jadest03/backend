@@ -213,12 +213,13 @@ public final class ItineraryValidator {
             return new TravelLeg(TravelMode.TRANSIT, policy.unknownLegMinutes(), 0, LegSource.ESTIMATED);
         }
         double straight = TravelEstimator.straightLineMeters(from, to);
-        if (straight <= policy.sameSpotMeters()) {
+        TravelMode chosen = visit == null ? null : visit.travelMode();
+        // 사용자가 고른 수단은 같은 장소 거리여도 그 수단으로 조회한다
+        if (chosen == null && straight <= policy.sameSpotMeters()) {
             return new TravelLeg(TravelMode.WALK, 0, (int) Math.round(straight), LegSource.SAME_SPOT);
         }
         // 렌터카를 빌린 날이라도 걸어갈 거리는 걷는다. 차를 쓰는 건 걷기 기준을 넘는 구간뿐이다
         TravelMode longLeg = trip.drivingOn(date) ? TravelMode.DRIVE : TravelMode.TRANSIT;
-        TravelMode chosen = visit == null ? null : visit.travelMode();
         TravelMode mode = chosen != null ? chosen
                 : straight <= policy.walkThresholdMeters(preferences.walking()) ? TravelMode.WALK : longLeg;
         TravelLookup lookup = TravelLookups.safe(travel,

@@ -67,7 +67,7 @@ public class TravelTime {
             if (walk != null && minutes(walk) <= WALK_MAX_MIN) return leg(walk, Mode.WALK);
 
             Route drive = route(from, to, "DRIVE", null);
-            if (drive != null) return transitByDrive(drive);
+            if (drive != null) return transitFromDrive(leg(drive, Mode.DRIVE), from, to);
         } catch (RestClientException e) {
             log.warn("Routes API 오류, 직선거리로 추정: {}", e.getMessage());
         }
@@ -90,18 +90,11 @@ public class TravelTime {
 
     /*
     사용자가 대중교통을 고른 구간: 가까워도 대중교통.
-    대중교통 경로가 없으면(일본 등) 자동차 시간 + 10분 추정, 그것도 없으면 직선거리로 추정
+    대중교통 경로가 없거나(일본 등) 대중교통 조회가 실패하면 이동 수단 선택 화면(options)과 같은 규칙으로 추정
     */
     public Leg transit(LatLng from, LatLng to, Instant departure) {
-        try {
-            Route transit = route(from, to, "TRANSIT", transitDeparture(departure, Instant.now()));
-            if (transit != null && hasTransitStep(transit)) return leg(transit, Mode.TRANSIT);
-            Route drive = route(from, to, "DRIVE", null);
-            if (drive != null) return transitByDrive(drive);
-        } catch (RestClientException e) {
-            log.warn("Routes API 오류, 직선거리로 추정: {}", e.getMessage());
-        }
-        return straightLineTransit(from, to);
+        Leg transit = transitRoute(from, to, departure);
+        return transit != null ? transit : transitFromDrive(drive(from, to), from, to);
     }
 
     /*
@@ -110,18 +103,20 @@ public class TravelTime {
     */
     public List<Leg> options(LatLng from, LatLng to, Instant departure) {
         Leg drive = drive(from, to);
-        Leg transit = null;
+        Leg transit = transitRoute(from, to, departure);
+        if (transit == null) transit = transitFromDrive(drive, from, to);
+        return List.of(walk(from, to), transit, drive);
+    }
+
+    // 대중교통 경로. 경로가 없거나(일본 등) API 오류면 null
+    private Leg transitRoute(LatLng from, LatLng to, Instant departure) {
         try {
             Route route = route(from, to, "TRANSIT", transitDeparture(departure, Instant.now()));
-            if (route != null && hasTransitStep(route)) transit = leg(route, Mode.TRANSIT);
+            if (route != null && hasTransitStep(route)) return leg(route, Mode.TRANSIT);
         } catch (RestClientException e) {
-            log.warn("Routes API 오류, 추정: {}", e.getMessage());
+            log.warn("Routes API 오류(대중교통), 자동차 경로로 추정: {}", e.getMessage());
         }
-        if (transit == null) {
-            transit = drive.estimated() ? straightLineTransit(from, to)
-                    : new Leg(drive.minutes() + TRANSIT_EXTRA_MIN, Mode.TRANSIT, true, drive.distanceMeters());
-        }
-        return List.of(walk(from, to), transit, drive);
+        return null;
     }
 
     /*
@@ -151,10 +146,11 @@ public class TravelTime {
         return new Leg(minutes(r), mode, false, r.distanceMeters() == null ? 0 : r.distanceMeters());
     }
 
-    // 대중교통 경로가 없을 때: 자동차 시간 + 10분, 거리는 자동차 길
-    private static Leg transitByDrive(Route drive) {
-        Leg car = leg(drive, Mode.DRIVE);
-        return new Leg(car.minutes() + TRANSIT_EXTRA_MIN, Mode.TRANSIT, true, car.distanceMeters());
+    // 대중교통 경로가 없을 때: 자동차 시간 + 10분, 거리는 자동차 길. 자동차도 추정치(경로 없음·오류)면 직선거리로 추정
+    // 자동 선택(get), 고른 대중교통(transit), 선택 화면(options)이 모두 이 규칙을 씀
+    static Leg transitFromDrive(Leg drive, LatLng from, LatLng to) {
+        return drive.estimated() ? straightLineTransit(from, to)
+                : new Leg(drive.minutes() + TRANSIT_EXTRA_MIN, Mode.TRANSIT, true, drive.distanceMeters());
     }
 
     // ponytail: 굽은 길 1.3배, 도보 분당 80m, 대중교통 분당 300m + 10분. 실제 값과 비교해서 조정.

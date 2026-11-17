@@ -7,6 +7,7 @@ import com.dotlo.line4thon_18team.itinerary.validation.model.TravelMode;
 import com.dotlo.line4thon_18team.itinerary.validation.model.ValidationOrigin;
 import com.dotlo.line4thon_18team.itinerary.validation.model.VisitDraft;
 import com.dotlo.line4thon_18team.itinerary.validation.port.TravelQuery;
+import com.dotlo.line4thon_18team.itinerary.validation.result.LegSource;
 import com.dotlo.line4thon_18team.itinerary.validation.result.ValidationResult;
 import com.dotlo.line4thon_18team.itinerary.validation.support.FakeTravelTimeProvider;
 import com.dotlo.line4thon_18team.itinerary.validation.support.OsakaFixtures;
@@ -68,6 +69,24 @@ class TravelModeChoiceValidationTest {
             assertThat(query.mode()).isEqualTo(TravelMode.TRANSIT);
             assertThat(query.chosen()).isFalse();
         });
+    }
+
+    @Test
+    void 같은_자리여도_고른_수단으로_묻는다() {
+        // 도톤보리 바로 옆 가게(0m)로 자동차를 고르면 같은 장소로 건너뛰지 않고 자동차로 조회
+        PlaceInfo nextDoor = new PlaceInfo("p-dotonbori-2", "도톤보리 옆 가게", DOTONBORI.location(),
+                DOTONBORI.category(), DOTONBORI.openingHours());
+        ItineraryValidator sameSpotValidator =
+                new ItineraryValidator(OsakaFixtures.places().add(nextDoor), travel, ValidationPolicy.defaults());
+        ValidationResult result = sameSpotValidator.validate(ItineraryDraft.of(DayDraft.of(DAY3,
+                        new VisitDraft("v-1", DOTONBORI.placeId(), null, null, null),
+                        new VisitDraft("v-2", nextDoor.placeId(), null, null, TravelMode.DRIVE))),
+                OsakaFixtures.tripWithRentalOnDay2(), PreferenceProfile.defaults(), ValidationOrigin.USER_EDITED);
+
+        TravelQuery toNextDoor = travel.queries().get(1);
+        assertThat(toNextDoor.mode()).isEqualTo(TravelMode.DRIVE);
+        assertThat(toNextDoor.chosen()).isTrue();
+        assertThat(result.days().get(0).visits().get(1).travel().source()).isNotEqualTo(LegSource.SAME_SPOT);
     }
 
     private ValidationResult validate(LocalDate date, PlaceInfo place, TravelMode mode) {

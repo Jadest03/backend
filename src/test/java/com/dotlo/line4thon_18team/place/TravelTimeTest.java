@@ -47,6 +47,16 @@ class TravelTimeTest {
         assertEquals(new Leg(11, Mode.TRANSIT, true, road(미도스지점, 글리코사인)), TravelTime.straightLineTransit(미도스지점, 글리코사인));
     }
 
+    @Test
+    void 대중교통이_없을_때_추정은_자동차_경로_기준() {
+        // 대중교통 조회만 실패해도 자동차 경로가 있으면 자동차 시간 + 10분, 거리는 자동차 길 (선택 화면과 검증이 같은 값)
+        assertEquals(new Leg(22, Mode.TRANSIT, true, 4800),
+                TravelTime.transitFromDrive(new Leg(12, Mode.DRIVE, false, 4800), 미도스지점, 하루카스));
+        // 자동차도 추정치면 직선거리로 대중교통 추정
+        assertEquals(TravelTime.straightLineTransit(미도스지점, 하루카스),
+                TravelTime.transitFromDrive(TravelTime.straightLineDrive(미도스지점, 하루카스), 미도스지점, 하루카스));
+    }
+
     // 직선거리 × 1.3
     private static int road(LatLng from, LatLng to) {
         return (int) Math.round(PlaceMatcher.meters(from.lat(), from.lng(), to.lat(), to.lng()) * 1.3);

@@ -86,6 +86,11 @@ class TravelOptionControllerTest {
                 .andExpect(status().isBadRequest());
         mvc.perform(request(NAMBA, CASTLE).param("departAt", "내일"))
                 .andExpect(status().isBadRequest());
+        mvc.perform(request(NAMBA, new LatLng(CASTLE.lat(), CASTLE.lng() + 360)))   // 거리 계산으로는 오사카와 같은 점
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("INVALID_INPUT"));
+        mvc.perform(request(new LatLng(NAMBA.lat() + 360, NAMBA.lng()), CASTLE))
+                .andExpect(status().isBadRequest());
 
         verify(travelTime, never()).options(any(), any(), any());
     }
