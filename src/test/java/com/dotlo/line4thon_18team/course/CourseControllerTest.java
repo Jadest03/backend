@@ -16,6 +16,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
+import org.mockito.ArgumentCaptor;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
@@ -24,6 +25,8 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.transaction.annotation.Transactional;
 import tools.jackson.databind.ObjectMapper;
 
+import java.time.Clock;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalTime;
 import java.time.ZoneId;
@@ -54,6 +57,7 @@ class CourseControllerTest {
     @Autowired CourseService service;
     @Autowired EntityManager em;
     @Autowired ObjectMapper mapper;
+    @Autowired Clock clock;
     @MockitoBean PlacePhotos placePhotos;  // 구글 호출 대역
     @MockitoBean TravelTime travelTime;    // 구글 경로 대역
 
@@ -161,6 +165,8 @@ class CourseControllerTest {
     @Test
     void 같은_날_앞_장소에서_오는_이동을_장소마다_붙인다() throws Exception {
         when(travelTime.get(any(), any(), any())).thenReturn(new Leg(12, Mode.TRANSIT, false, 1800));
+        ZoneId tokyo = ZoneId.of("Asia/Tokyo");
+        LocalDate before = LocalDate.now(clock.withZone(tokyo));
 
         mvc.perform(get("/api/courses/{courseId}", kyotoId))
                 .andExpect(status().isOk())
@@ -171,10 +177,13 @@ class CourseControllerTest {
                 .andExpect(jsonPath("$.days[0].stops[1].travel.distanceMeters").value(1800))
                 .andExpect(jsonPath("$.days[2].stops[0].travel").value(nullValue()));
 
-        // 구간은 1일차 하나뿐. 출발은 내일, 앞 장소 예시 시각(09:00) 교토 현지
-        ZoneId tokyo = ZoneId.of("Asia/Tokyo");
-        var departure = LocalDate.now(tokyo).plusDays(1).atTime(9, 0).atZone(tokyo).toInstant();
-        verify(travelTime, times(1)).get(eq(new LatLng(34.99, 135.78)), eq(new LatLng(34.98, 135.77)), eq(departure));
+        // 구간은 1일차 하나뿐. 출발은 내일, 앞 장소 예시 시각(09:00) 교토 현지. 요청 중에 현지 날짜가 바뀌어도 통과하게 전후 날짜 둘 다 허용
+        LocalDate after = LocalDate.now(clock.withZone(tokyo));
+        var departure = ArgumentCaptor.forClass(Instant.class);
+        verify(travelTime, times(1)).get(eq(new LatLng(34.99, 135.78)), eq(new LatLng(34.98, 135.77)), departure.capture());
+        assertThat(departure.getValue()).isIn(
+                before.plusDays(1).atTime(9, 0).atZone(tokyo).toInstant(),
+                after.plusDays(1).atTime(9, 0).atZone(tokyo).toInstant());
     }
 
     @Test

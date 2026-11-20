@@ -158,7 +158,7 @@ public class TravelTime {
     }
 
     // ponytail: 굽은 길 1.3배, 도보 분당 80m, 대중교통 분당 300m + 10분. 실제 값과 비교해서 조정.
-    static Leg straightLine(LatLng from, LatLng to) {
+    public static Leg straightLine(LatLng from, LatLng to) {
         Leg walk = straightLineWalk(from, to);
         return walk.minutes() <= WALK_MAX_MIN ? walk : straightLineTransit(from, to);
     }

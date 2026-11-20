@@ -30,10 +30,10 @@ public record CourseDetailResponse(Long id, String title, String country, String
                 course.getDescription(), course.getTransportSummary(), Author.from(course), course.getTags(), days);
     }
 
-    /** 장소마다 travel을 legOf(장소 id)로 채운 사본 */
-    public CourseDetailResponse withTravel(Function<Long, Leg> legOf) {
+    /** 장소마다 travel을 legOf(장소)로 채운 사본 */
+    public CourseDetailResponse withTravel(Function<Stop, Leg> legOf) {
         List<Day> filled = days.stream().map(day -> new Day(day.dayNumber(), day.stopCount(),
-                day.stops().stream().map(stop -> stop.withTravel(legOf.apply(stop.id()))).toList())).toList();
+                day.stops().stream().map(stop -> stop.withTravel(legOf.apply(stop))).toList())).toList();
         return new CourseDetailResponse(id, title, country, city, dayCount, nightCount, stopCount, coverImageUrl,
                 description, transportSummary, author, tags, filled);
     }
