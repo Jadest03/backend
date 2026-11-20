@@ -7,6 +7,7 @@ import com.dotlo.line4thon_18team.course.dto.CourseImportResponse;
 import com.dotlo.line4thon_18team.course.dto.CourseSummaryResponse;
 import com.dotlo.line4thon_18team.course.service.CourseImportService;
 import com.dotlo.line4thon_18team.course.service.CourseService;
+import com.dotlo.line4thon_18team.course.service.CourseTravel;
 import com.dotlo.line4thon_18team.place.PlacePhotos;
 import com.dotlo.line4thon_18team.place.PlacePhotos.Photo;
 import jakarta.validation.Valid;
@@ -33,15 +34,17 @@ public class CourseController {
     private final CourseService courseService;
     private final CourseImportService courseImportService;
     private final PlacePhotos placePhotos;
+    private final CourseTravel courseTravel;
 
     @GetMapping
     public List<CourseSummaryResponse> list(@RequestParam(required = false) String city) {
         return courseService.list(city);
     }
 
+    // 구간 이동은 DB 조회가 끝난 뒤 구한다 (구글을 기다리는 동안 DB 연결을 잡지 않게)
     @GetMapping("/{courseId}")
     public CourseDetailResponse get(@PathVariable long courseId) {
-        return courseService.get(courseId);
+        return courseTravel.attach(courseService.get(courseId));
     }
 
     // 비회원도 코스 상세를 보므로 로그인 없이 연다. 대신 이 코스에 들어 있는 장소 사진만 준다 (아무 장소나 불러 요금을 쓰지 못하게)

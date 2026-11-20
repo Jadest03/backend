@@ -5,6 +5,7 @@ import com.dotlo.line4thon_18team.course.entity.Course;
 import com.dotlo.line4thon_18team.course.entity.CourseDay;
 import com.dotlo.line4thon_18team.course.entity.CourseStop;
 import com.dotlo.line4thon_18team.place.PlaceCategory;
+import com.dotlo.line4thon_18team.place.TravelTime.Leg;
 
 import java.time.LocalTime;
 import java.util.List;
@@ -29,6 +30,14 @@ public record CourseDetailResponse(Long id, String title, String country, String
                 course.getDescription(), course.getTransportSummary(), Author.from(course), course.getTags(), days);
     }
 
+    /** 장소마다 travel을 legOf(장소 id)로 채운 사본 */
+    public CourseDetailResponse withTravel(Function<Long, Leg> legOf) {
+        List<Day> filled = days.stream().map(day -> new Day(day.dayNumber(), day.stopCount(),
+                day.stops().stream().map(stop -> stop.withTravel(legOf.apply(stop.id()))).toList())).toList();
+        return new CourseDetailResponse(id, title, country, city, dayCount, nightCount, stopCount, coverImageUrl,
+                description, transportSummary, author, tags, filled);
+    }
+
     public record Day(int dayNumber, int stopCount, List<Stop> stops) {
         static Day from(int number, CourseDay day) {
             List<Stop> stops = day == null ? List.of() : day.getStops().stream().map(Stop::from).toList();
@@ -36,11 +45,16 @@ public record CourseDetailResponse(Long id, String title, String country, String
         }
     }
 
+    /** @param travel 같은 날 앞 장소에서 오는 이동 (구글 경로 조회). 그날 첫 장소는 null */
     public record Stop(Long id, int position, String placeId, String name, PlaceCategory category,
-                        double latitude, double longitude, LocalTime visitTime, String imageUrl) {
+                        double latitude, double longitude, LocalTime visitTime, String imageUrl, Leg travel) {
         static Stop from(CourseStop stop) {
             return new Stop(stop.getId(), stop.getPosition(), stop.getPlaceId(), stop.getName(), stop.getCategory(),
-                    stop.getLatitude(), stop.getLongitude(), stop.getVisitTime(), stop.getImageUrl());
+                    stop.getLatitude(), stop.getLongitude(), stop.getVisitTime(), stop.getImageUrl(), null);
+        }
+
+        Stop withTravel(Leg leg) {
+            return new Stop(id, position, placeId, name, category, latitude, longitude, visitTime, imageUrl, leg);
         }
     }
 }

@@ -107,7 +107,8 @@ courseId는 양수인 숫자 id다. 사용자 여행이나 저장 장소 id와 �
           "latitude": 34.99,
           "longitude": 135.78,
           "visitTime": "09:00:00",
-          "imageUrl": null
+          "imageUrl": null,
+          "travel": null
         }
       ]
     },
@@ -123,7 +124,12 @@ courseId는 양수인 숫자 id다. 사용자 여행이나 저장 장소 id와 �
 - visitTime은 등록한 원본의 예시 현지 시각이다. 없으면 null. 사용자 여행에 적용한 확정 시각은 아니다.
 - category는 기존 장소 카테고리 9개를 사용한다. 코스 tags와는 별개다.
 - 좌표와 방문 순서로 지도에 번호 핀을 표시할 수 있다.
-- 구간별 실제 이동시간·거리·영업시간은 이 API가 조회하거나 저장하지 않는다. 사용자 여행에 담기와 일정 검증 연결은 후속 작업이다.
+- travel은 같은 날 앞 장소에서 이 장소까지의 이동이다. 그날 첫 장소는 null. 모양은 이동 수단 선택(`GET /api/trips/{tripId}/travel-options`)의 한 항목과 같다: `{"minutes": 12, "mode": "TRANSIT", "estimated": false, "distanceMeters": 1800}`
+  - mode는 WALK, TRANSIT, DRIVE. 걸어서 20분 이내면 WALK, 더 멀면 대중교통
+  - estimated가 true면 구글 경로가 없거나 오류라 추정한 값 ("약 N분" 표시 추천)
+  - 대중교통 시간표는 내일, 앞 장소의 예시 방문 시각(없으면 10시) 출발 기준이다
+- 구글 약관상 경로 결과는 저장할 수 없어서 상세를 볼 때마다 구글 경로를 조회한다 (구간당 최대 3번, 코스 하나 구간 3~9개). 구간은 동시에 조회한다.
+- 영업시간은 이 API가 조회하지 않는다.
 
 ### Error
 
