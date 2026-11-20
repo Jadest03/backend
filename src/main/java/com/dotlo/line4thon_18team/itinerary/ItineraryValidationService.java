@@ -74,7 +74,9 @@ public class ItineraryValidationService {
         Trip trip = tripService.findMemberTrip(userId, tripId);
         List<SavedPlace> places = savedPlaceRepository.findAllByTripIdOrderByIdAsc(tripId);
         ItineraryValidator validator = new ItineraryValidator(
-                new SavedPlaceInfoProvider(places, openingHours::get), travelTimeProvider, validationPolicy);
+                new SavedPlaceInfoProvider(places, openingHours::get),
+                new RunScopedTravelTimeProvider(travelTimeProvider),   // 이동시간은 이 요청 안에서만 재사용 (약관상 요청 간 저장 불가)
+                validationPolicy);
         return new ValidationRun(trip, places, validator, tripContext(trip, tripId),
                 preferenceService.profileOrDefault(tripId, userId));
     }

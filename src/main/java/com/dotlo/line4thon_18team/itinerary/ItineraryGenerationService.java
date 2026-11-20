@@ -101,10 +101,18 @@ public class ItineraryGenerationService {
 
         GeneratedItinerary last = null;
         List<String> problems = List.of();
+        long startedAt = System.nanoTime();
         for (int attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+            long llmStart = System.nanoTime();
             PlanGenerationOutput plan = llm.execute(planGenerationTask, input.retryWith(problems)).value();
+            long llmEnd = System.nanoTime();
             ItineraryDraft draft = toDraft(plan, input, run.trip().getStartDate());
             ValidationResult validation = run.validate(draft, ValidationOrigin.AI_GENERATED);
+            long validateEnd = System.nanoTime();
+            log.info("일정 생성 시간 tripId={} attempt={}/{} llm={}ms validate={}ms total={}ms valid={}",
+                    tripId, attempt, MAX_ATTEMPTS, (llmEnd - llmStart) / 1_000_000,
+                    (validateEnd - llmEnd) / 1_000_000, (validateEnd - startedAt) / 1_000_000,
+                    validation.summary().valid());
 
             last = new GeneratedItinerary(draft, validation, placeIds(plan.excluded(), input), attempt);
             if (validation.summary().valid()) {

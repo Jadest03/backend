@@ -24,6 +24,9 @@ import com.dotlo.line4thon_18team.itinerary.validation.result.ValidationResult;
 import com.dotlo.line4thon_18team.place.PlaceCategory;
 import com.dotlo.line4thon_18team.preference.domain.PreferenceProfile;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import java.time.Duration;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -54,6 +57,7 @@ import java.util.Set;
  */
 public final class ItineraryValidator {
 
+    private static final Logger log = LoggerFactory.getLogger(ItineraryValidator.class);
     private static final DateTimeFormatter HH_MM = DateTimeFormatter.ofPattern("HH:mm");
 
     private final PlaceInfoProvider places;
@@ -81,11 +85,14 @@ public final class ItineraryValidator {
         Objects.requireNonNull(origin, "origin");
         checkInput(draft, trip);
 
+        long startedAt = System.nanoTime();
         Map<LocalDate, DayWindow> windows = new LinkedHashMap<>();
         for (DayWindow window : windowCalculator.calculate(trip, preferences)) {
             windows.put(window.date(), window);
         }
+        long windowsEnd = System.nanoTime();
         Map<String, PlaceInfo> placeInfos = findPlaces(draft);
+        long placesEnd = System.nanoTime();
 
         Issues issues = new Issues(origin);
         List<DayTimeline> timelines = new ArrayList<>();
@@ -93,6 +100,10 @@ public final class ItineraryValidator {
                 .sorted(Comparator.comparing(DayDraft::date))
                 .forEach(day -> timelines.add(
                         buildDay(day, windows.get(day.date()), trip, preferences, placeInfos, issues)));
+        long daysEnd = System.nanoTime();
+        log.info("검증 시간 windows={}ms places={}ms days={}ms",
+                (windowsEnd - startedAt) / 1_000_000, (placesEnd - windowsEnd) / 1_000_000,
+                (daysEnd - placesEnd) / 1_000_000);
         return ValidationResult.of(timelines, issues.list);
     }
 
