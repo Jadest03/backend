@@ -79,9 +79,9 @@ public class CourseTravel {
                 }
                 Instant departure = departure(day.stops().get(i - 1), zone);
                 legs.put(day.stops().get(i), CompletableFuture.supplyAsync(() -> travelTime.get(from, to, departure), executor)
-                        .completeOnTimeout(estimate, legTimeout.toMillis(), TimeUnit.MILLISECONDS)
+                        .orTimeout(legTimeout.toMillis(), TimeUnit.MILLISECONDS)   // 시간 초과도 아래 로그에 남게
                         .exceptionally(e -> {
-                            log.warn("코스 구간 이동 조회 실패, 직선거리로 추정: {}", e.getMessage());
+                            log.warn("코스 구간 이동 조회 실패, 직선거리로 추정: {}", e.toString());
                             return estimate;
                         }));
             }
